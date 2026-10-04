@@ -6,9 +6,12 @@ no App Store, no account, no server — your data stays on your phone.
 
 ## Features
 
-- **Plans** — Upper/Lower/Push/Pull/Legs, Classic body-part split, Strength + Conditioning
-  (all 5 days/week), plus a 3-day full-body plan for busy weeks. "Today" always shows the next
-  workout in the rotation, so a missed day never breaks the plan.
+- **Plans** — a Beginner 5-day plan (machines first, recommended), a 3-day full-body plan,
+  and three harder 5-day plans for later. Every workout is pinned to a weekday — Monday is
+  always leg day — and Today shows rest days, what’s done, and anything you missed this week.
+- **Warm-up** — an 8-minute checklist before every workout, plus a warm-up-set reminder on
+  the first weighted exercise.
+- **Beginner tips** — “New to the gym?” guide for the first weeks.
 - **Workout logger** — tap ✓ per set; weights carry down from the set above; rest timer with
   beep, ±15 s and skip; swap an exercise if a machine is busy; screen stays awake.
 - **Progression** — shows what you did last time and suggests adding weight once you hit the

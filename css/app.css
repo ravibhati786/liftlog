@@ -252,3 +252,33 @@ body.in-workout .screen { padding-bottom: calc(var(--safe-b) + 40px); }
 
 .toast { position: fixed; z-index: 100; left: 50%; top: calc(var(--safe-t) + 12px); transform: translate(-50%, -20px); opacity: 0; transition: .25s; background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-weight: 600; font-size: 15px; box-shadow: 0 6px 20px rgba(0,0,0,.25); max-width: 90vw; text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* week strip: planned training days get a dot */
+.wdot { width: 5px; height: 5px; border-radius: 50%; background: transparent; margin-top: -2px; }
+.wday.planned .wdot { background: var(--acc); }
+.wday.planned.done .wdot { background: transparent; }
+
+.done-card { text-align: center; }
+.done-card .big { font-size: 40px; }
+.tips-card .big { font-size: 26px; }
+.tip-item { display: flex; gap: 12px; align-items: flex-start; }
+.tip-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.plan.recommended { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); }
+.plan-days b { color: var(--acc); font-weight: 700; }
+
+/* warm-up */
+.wu-li span:first-child { font-weight: 600; color: var(--acc); }
+.ex-preview li.wu-li::before { content: '🔥'; }
+.wu-list { list-style: none; padding: 0; margin: 10px 0 0; }
+.wu-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.wu-list li .ico.sm { vertical-align: -3px; margin-left: 4px; }
+.wu-card { border-color: color-mix(in srgb, var(--acc) 35%, var(--line)); }
+.wu-card.folded { border-color: var(--line); }
+.wu-badge { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--acc-soft); flex: none; }
+.wu-badge.ok { background: var(--ok); color: #fff; }
+.check.on { background: var(--ok); color: #fff; }
+.tip.info { background: var(--surface-2); color: var(--muted); font-weight: 500; }
+.ex-preview li.wu-li { counter-increment: none; }
+.wu-card > .row.between { align-items: flex-start; gap: 12px; }
+.wu-card > .row.between .link { flex: none; padding-top: 0; }
+.num.na { display: grid; place-items: center; color: var(--muted); background: none; }

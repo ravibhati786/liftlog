@@ -1,5 +1,5 @@
 import { EXERCISES } from './exercises.js'
-import { PLANS, planById } from './plans.js'
+import { PLANS, planById, WARMUPS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
 import { state, update, subscribe, replaceAll, resetAll } from './store.js'
 import {
   h, svgIcon, todayISO, isoDate, parseISO, fmtDate, startOfWeek, fmtDuration, fmtMinutes,
@@ -8,6 +8,8 @@ import {
 
 /* ================================ exercise helpers ================================ */
 
+// "Lever" is the dataset's word for a weight-stack machine; "Machine" is what a beginner sees.
+for (const e of EXERCISES) e.n = e.n.replace(/^Lever /, 'Machine ').replace(/^Low glute bridge on floor$/, 'Glute bridge')
 const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]))
 const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/videos/'
 const gifSrc = ex => GIF_BASE + ex.gif
@@ -26,6 +28,7 @@ const GROUPS = {
   Cardio: ['cardiovascular system']
 }
 const groupOf = tg => Object.keys(GROUPS).find(g => GROUPS[g].includes(tg)) || 'Other'
+const secs = r => r >= 120 ? `${Math.round(r / 60)} min` : `${r}s`
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 
 /* ================================ history queries ================================ */
@@ -138,25 +141,62 @@ function greeting () {
   return hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-function workoutsThisWeek () {
+const WARMUP_MIN = 8
+const SHORT_DAY = d => DAY_NAMES[d].slice(0, 3)
+const ord = dow => (dow + 6) % 7 // Monday = 0 … Sunday = 6
+
+// Where you are in this week's plan: today's workout, what's done, what was missed, what's next.
+function weekStatus (plan) {
+  const S = state()
+  const dow = new Date().getDay()
   const from = isoDate(startOfWeek())
-  return state().workouts.filter(w => w.date >= from)
+  const week = S.workouts.filter(w => w.date >= from)
+  const doneIdx = new Set(week.filter(w => w.planId === plan.id).map(w => w.dayIdx))
+  const todayIdx = plan.days.findIndex(d => d.dow === dow)
+  // Only days since you picked the plan can be "missed" — a plan chosen on Sunday owes nothing.
+  const since = S.planSince || todayISO()
+  const dateOf = d => { const x = startOfWeek(); x.setDate(x.getDate() + ord(d.dow)); return isoDate(x) }
+  const missed = plan.days.map((_, i) => i).filter(i => ord(plan.days[i].dow) < ord(dow) && !doneIdx.has(i) && dateOf(plan.days[i]) >= since)
+  let nextIdx = plan.days.findIndex(d => ord(d.dow) > ord(dow))
+  if (nextIdx < 0) nextIdx = 0
+  return { dow, week, doneIdx, todayIdx, missed, nextIdx }
 }
 
-function WeekStrip () {
+function WeekStrip (plan) {
   const start = startOfWeek()
   const done = new Set(state().workouts.map(w => w.date))
+  const planned = new Set(plan.days.map(d => d.dow))
   const today = todayISO()
   return h('div', { class: 'week' }, [...Array(7)].map((_, i) => {
     const d = new Date(start); d.setDate(d.getDate() + i)
     const iso = isoDate(d)
-    return h('div', { class: 'wday' + (done.has(iso) ? ' done' : '') + (iso === today ? ' today' : '') },
+    const isPlanned = planned.has(d.getDay())
+    return h('div', { class: 'wday' + (done.has(iso) ? ' done' : '') + (iso === today ? ' today' : '') + (isPlanned ? ' planned' : '') },
       h('span', { class: 'wl' }, 'MTWTFSS'[i]),
-      h('span', { class: 'wd' }, done.has(iso) ? svgIcon('check', 'ico sm') : d.getDate()))
+      h('span', { class: 'wd' }, done.has(iso) ? svgIcon('check', 'ico sm') : d.getDate()),
+      h('span', { class: 'wdot' }))
   }))
 }
 
-const estMinutes = day => Math.round(day.ex.reduce((t, e) => t + e.sets * (45 + e.rest), 0) / 60 / 5) * 5
+// Rough session length: ~3 s per rep (or the timed seconds) plus rest, plus the warm-up.
+const estMinutes = day => WARMUP_MIN + Math.round(day.ex.reduce((t, e) => t + e.sets * ((isTimed(e.id) ? e.max : e.max * 3) + e.rest), 0) / 60 / 5) * 5
+
+function WorkoutCard (plan, i, label, { primary = true, cta = 'Start workout' } = {}) {
+  const day = plan.days[i]
+  return h('section', { class: 'card next' },
+    h('div', { class: 'label accent' }, label),
+    h('h2', null, day.name),
+    h('p', { class: 'muted' }, `${day.focus} · ~${estMinutes(day)} min`),
+    h('ol', { class: 'ex-preview' },
+      h('li', { class: 'wu-li', onclick: () => planDaySheet(plan, i) }, h('span', null, 'Warm-up'), h('span', { class: 'muted nowrap' }, `${WARMUP_MIN} min`)),
+      day.ex.map(e => h('li', { onclick: () => exerciseSheet(e.id) },
+        h('span', null, EX[e.id].n), h('span', { class: 'muted nowrap' }, `${e.sets} × ${repText(e)}`)))),
+    h('button', { class: 'btn block' + (primary ? ' primary' : ''), onclick: () => startWorkout(plan.id, i) }, cta))
+}
+
+const repText = e => isTimed(e.id)
+  ? (e.max >= 120 ? `${Math.round(e.min / 60)}–${Math.round(e.max / 60)} min` : `${e.min}–${e.max}s`)
+  : `${e.min}–${e.max}`
 
 function TodayScreen () {
   const S = state()
@@ -169,39 +209,68 @@ function TodayScreen () {
     return [header,
       h('section', { class: 'card hero' },
         h('h2', null, 'Pick your training plan'),
-        h('p', { class: 'muted' }, 'Choose one of the ready-made programs below. It sets up your week automatically — just open the app at the gym and press Start.')),
+        h('p', { class: 'muted' }, 'New to the gym? Start with the Beginner plan — it’s marked “Recommended”. Each workout is set for a fixed day of the week, so you just open the app at the gym and press Start.')),
+      BeginnerTipsCard(),
       PlanList()]
   }
 
-  const week = workoutsThisWeek()
+  const st = weekStatus(plan)
   const target = plan.days.length
-  const dayIdx = S.nextDay % plan.days.length
-  const day = plan.days[dayIdx]
-  const doneThisWeek = new Set(week.filter(w => w.planId === plan.id).map(w => w.dayIdx))
+  const doneCount = st.doneIdx.size
+  const next = plan.days[st.nextIdx]
+  const nextLabel = `Next · ${DAY_NAMES[next.dow]}`
+
+  let main
+  if (st.todayIdx >= 0 && !st.doneIdx.has(st.todayIdx)) {
+    main = WorkoutCard(plan, st.todayIdx, `Today · ${DAY_NAMES[st.dow]}`)
+  } else if (st.todayIdx >= 0) {
+    main = [h('section', { class: 'card done-card' }, h('div', { class: 'big' }, '✅'), h('h2', null, 'Today’s workout is done'), h('p', { class: 'muted' }, 'Great job! Eat well, drink water and get a good night’s sleep — that’s when your body gets stronger.')),
+      WorkoutCard(plan, st.nextIdx, nextLabel, { primary: false, cta: 'Start early' })]
+  } else {
+    main = [h('section', { class: 'card done-card' }, h('div', { class: 'big' }, '😴'), h('h2', null, 'Rest day'), h('p', { class: 'muted' }, 'Recovery is when your muscles grow. A walk or some light stretching is perfect today.')),
+      WorkoutCard(plan, st.nextIdx, nextLabel, { primary: false, cta: 'Train anyway' })]
+  }
 
   return [header,
     h('section', { class: 'card' },
       h('div', { class: 'row between' },
-        h('div', null, h('div', { class: 'label' }, 'This week'), h('div', { class: 'big' }, `${week.length}`, h('span', { class: 'muted' }, ` / ${target} workouts`))),
-        h('div', { class: 'ring', style: `--p:${Math.min(1, week.length / target)}` }, h('span', null, Math.round(Math.min(1, week.length / target) * 100) + '%'))),
-      WeekStrip()),
+        h('div', null, h('div', { class: 'label' }, 'This week'), h('div', { class: 'big' }, `${doneCount}`, h('span', { class: 'muted' }, ` / ${target} workouts`))),
+        h('div', { class: 'ring', style: `--p:${Math.min(1, doneCount / target)}` }, h('span', null, Math.round(Math.min(1, doneCount / target) * 100) + '%'))),
+      WeekStrip(plan)),
 
-    h('section', { class: 'card next' },
-      h('div', { class: 'label accent' }, `Next up · Day ${dayIdx + 1} of ${plan.days.length}`),
-      h('h2', null, day.name),
-      h('p', { class: 'muted' }, `${day.focus} · ~${estMinutes(day)} min`),
-      h('ol', { class: 'ex-preview' }, day.ex.map(e => h('li', { onclick: () => exerciseSheet(e.id) },
-        h('span', null, EX[e.id].n), h('span', { class: 'muted nowrap' }, `${e.sets} × ${e.min}–${e.max}${isTimed(e.id) ? 's' : ''}`)))),
-      h('button', { class: 'btn primary block', onclick: () => startWorkout(plan.id, dayIdx) }, 'Start workout')),
+    main,
+
+    st.missed.length ? h('section', null,
+      h('div', { class: 'section-title' }, st.todayIdx >= 0 ? 'Missed this week' : 'Missed this week — catch up today?'),
+      h('div', { class: 'day-chips' }, st.missed.map(i => DayChip(plan, i, st)))) : null,
 
     h('section', null,
-      h('div', { class: 'section-title' }, 'Or pick another day'),
-      h('div', { class: 'day-chips' }, plan.days.map((d, i) => h('button', {
-        class: 'day-chip' + (i === dayIdx ? ' on' : ''),
-        onclick: () => planDaySheet(plan, i)
-      }, h('span', { class: 'dn' }, `Day ${i + 1}`), h('span', null, d.name), doneThisWeek.has(i) ? svgIcon('check', 'ico sm ok') : null)))),
+      h('div', { class: 'section-title' }, `Your week · ${plan.short}`),
+      h('div', { class: 'day-chips' }, plan.days.map((_, i) => DayChip(plan, i, st)))),
 
+    S.workouts.length < 10 ? BeginnerTipsCard() : null,
     LastWorkoutCard()]
+}
+
+function DayChip (plan, i, st) {
+  const d = plan.days[i]
+  return h('button', { class: 'day-chip' + (i === st.todayIdx ? ' on' : ''), onclick: () => planDaySheet(plan, i) },
+    h('span', { class: 'dn' }, DAY_NAMES[d.dow]), h('span', null, d.name),
+    st.doneIdx.has(i) ? svgIcon('check', 'ico sm ok') : null)
+}
+
+function BeginnerTipsCard () {
+  return h('section', { class: 'card tap tips-card', onclick: tipsSheet },
+    h('div', { class: 'row gap' }, h('div', { class: 'big' }, '💡'),
+      h('div', { class: 'grow' }, h('strong', null, 'New to the gym?'), h('div', { class: 'muted small' }, '9 quick tips for your first weeks — 2 minute read')),
+      svgIcon('chev', 'ico muted')))
+}
+
+function tipsSheet () {
+  openSheet(() => h('div', null,
+    h('h2', null, 'New to the gym?'),
+    h('p', { class: 'muted' }, 'Everyone starts somewhere. These basics will keep you safe and help you improve week after week.'),
+    BEGINNER_TIPS.map(([t, d], i) => h('div', { class: 'card flat tip-item' }, h('div', { class: 'tip-n' }, i + 1), h('div', null, h('strong', null, t), h('div', { class: 'muted small' }, d))))), { full: true })
 }
 
 function LastWorkoutCard () {
@@ -221,31 +290,39 @@ function LastWorkoutCard () {
 function PlansScreen () {
   return [
     h('header', { class: 'top' }, h('div', null, h('div', { class: 'eyebrow' }, 'Programs'), h('h1', null, 'Plans'))),
-    h('p', { class: 'muted intro' }, 'All plans are for a full gym. Tap one to see every workout, then choose “Use this plan”. You can switch any time — your history is kept.'),
+    h('p', { class: 'muted intro' }, 'All plans are for a full gym and listed from easiest to hardest. Tap one to see every workout, then choose “Use this plan”. You can switch any time — your history is kept.'),
     PlanList()
   ]
 }
 
 function PlanList () {
   const S = state()
-  return h('div', { class: 'plan-list' }, PLANS.map(p => h('div', { class: 'card plan tap' + (p.id === S.planId ? ' current' : ''), onclick: () => planSheet(p) },
-    h('div', { class: 'row between' },
+  return h('div', { class: 'plan-list' }, PLANS.map(p => h('div', { class: 'card plan tap' + (p.id === S.planId ? ' current' : '') + (p.recommended ? ' recommended' : ''), onclick: () => planSheet(p) },
+    h('div', { class: 'row gap' },
+      p.recommended ? h('span', { class: 'pill accent' }, '★ Recommended for beginners') : null,
       h('span', { class: 'pill' }, `${p.days.length} days / week`),
       p.id === S.planId ? h('span', { class: 'pill ok' }, 'Current plan') : null),
     h('h3', null, p.name),
     h('p', { class: 'muted small' }, p.about),
-    h('div', { class: 'plan-days' }, p.days.map((d, i) => h('span', null, `${i + 1}. ${d.name}`))),
-    h('div', { class: 'muted small' }, `${p.level} · ${p.schedule}`))))
+    h('div', { class: 'plan-days' }, p.days.map(d => h('span', null, h('b', null, SHORT_DAY(d.dow)), ` ${d.name}`))),
+    h('div', { class: 'muted small' }, `Level: ${p.level} · ${p.schedule}`))))
+}
+
+function WarmupList (key) {
+  return h('ul', { class: 'wu-list' }, WARMUPS[key].map(w => h('li', { class: w.id ? 'tap' : null, onclick: w.id ? () => exerciseSheet(w.id) : null },
+    h('div', { class: 'grow' }, h('div', null, w.t), h('div', { class: 'muted small' }, w.d)),
+    w.id ? svgIcon('info', 'ico muted') : null)))
 }
 
 function planSheet (p) {
   openSheet(close => h('div', null,
-    h('span', { class: 'pill' }, `${p.days.length} days / week · ${p.level}`),
+    h('span', { class: 'pill' + (p.recommended ? ' accent' : '') }, `${p.days.length} days / week · ${p.level}`),
     h('h2', null, p.name),
     h('p', { class: 'muted' }, p.about),
-    h('p', { class: 'small muted' }, `Suggested schedule: ${p.schedule}. Missed a day? No problem — the app always gives you the next workout in order.`),
+    h('p', { class: 'small muted' }, `Schedule: ${p.schedule}. Every workout starts with an ${WARMUP_MIN}-minute warm-up. Missed a day? Just do today’s workout, or catch up at the weekend.`),
+    p.recommended ? h('button', { class: 'menu-item', onclick: tipsSheet }, '💡 New to the gym? Read the tips first') : null,
     p.days.map((d, i) => h('div', { class: 'card flat' },
-      h('div', { class: 'label' }, `Day ${i + 1} · ~${estMinutes(d)} min`),
+      h('div', { class: 'label' }, `${DAY_NAMES[d.dow]} · ~${estMinutes(d)} min`),
       h('h3', null, d.name),
       h('div', { class: 'muted small' }, d.focus),
       ExerciseRows(d.ex))),
@@ -255,7 +332,7 @@ function planSheet (p) {
         : h('button', {
           class: 'btn primary block',
           onclick: () => {
-            update(S => { S.planId = p.id; S.nextDay = 0 })
+            update(S => { S.planId = p.id; S.planSince = todayISO() })
             close(); ui.tab = 'today'; render(); toast(`${p.short} plan selected`)
           }
         }, 'Use this plan'))), { full: true })
@@ -264,16 +341,19 @@ function planSheet (p) {
 function ExerciseRows (list) {
   return h('ul', { class: 'ex-rows' }, list.map(e => h('li', { class: 'tap', onclick: () => exerciseSheet(e.id) },
     h('img', { class: 'thumb', loading: 'lazy', src: gifSrc(EX[e.id]), alt: '' }),
-    h('div', { class: 'grow' }, h('div', null, EX[e.id].n), h('div', { class: 'muted small' }, `${e.sets} sets × ${e.min}–${e.max} ${isTimed(e.id) ? 'sec' : 'reps'} · rest ${e.rest ? e.rest + 's' : '—'}`)),
+    h('div', { class: 'grow' }, h('div', null, EX[e.id].n), h('div', { class: 'muted small' }, `${e.sets} ${e.sets === 1 ? 'set' : 'sets'} × ${repText(e)}${isTimed(e.id) ? '' : ' reps'} · rest ${e.rest ? e.rest + 's' : '—'}`)),
     svgIcon('info', 'ico muted'))))
 }
 
 function planDaySheet (plan, i) {
   const d = plan.days[i]
   openSheet(close => h('div', null,
-    h('div', { class: 'label' }, `${plan.short} · Day ${i + 1}`),
+    h('div', { class: 'label' }, `${plan.short} · ${DAY_NAMES[d.dow]}`),
     h('h2', null, d.name),
     h('p', { class: 'muted' }, `${d.focus} · ~${estMinutes(d)} min`),
+    h('div', { class: 'section-title' }, `1. Warm-up · ${WARMUP_MIN} min`),
+    WarmupList(d.wu),
+    h('div', { class: 'section-title' }, '2. Workout'),
     ExerciseRows(d.ex),
     h('div', { class: 'sticky-cta' }, h('button', { class: 'btn primary block', onclick: () => { close(); startWorkout(plan.id, i) } }, 'Start this workout'))), { full: true })
 }
@@ -293,6 +373,9 @@ function startWorkout (planId, dayIdx) {
       planId: plan ? plan.id : null,
       dayIdx: plan ? dayIdx : null,
       name: day ? day.name : 'Custom workout',
+      wu: day ? day.wu : 'full',
+      warm: [],
+      warmOpen: true,
       startedAt: Date.now(),
       entries: day ? day.ex.map(e => newEntry(e.id, e.sets, e.min, e.max, e.rest)) : []
     }
@@ -315,24 +398,67 @@ function WorkoutScreen () {
       h('div', { class: 'wk-title' }, h('div', { class: 'strong' }, A.name), h('div', { class: 'muted small' }, h('span', { 'data-tick': 'elapsed' }, fmtDuration((Date.now() - A.startedAt) / 1000)), ` · ${doneSets}/${totalSets} sets`)),
       h('button', { class: 'btn primary sm', onclick: finishWorkout }, 'Finish')),
     h('div', { class: 'progress-bar' }, h('span', { style: `width:${totalSets ? doneSets / totalSets * 100 : 0}%` })),
-    A.entries.map((e, i) => EntryCard(e, i, unit)),
+    WarmupCard(A),
+    A.entries.map((e, i) => EntryCard(e, i, unit, i === firstWeighted(A))),
     h('button', { class: 'btn ghost block', onclick: () => exercisePicker({ title: 'Add exercise', onPick: id => update(S => S.active.entries.push(newEntry(id))) }) }, svgIcon('plus'), 'Add exercise'),
     h('button', { class: 'btn primary block', onclick: finishWorkout }, 'Finish workout'),
     h('div', { class: 'rest-spacer' }),
     RestBar())
 }
 
-function EntryCard (entry, idx, unit) {
+const firstWeighted = A => A.entries.findIndex(e => !isTimed(e.ex) && !isBodyweight(e.ex))
+
+// The warm-up checklist at the top of a session. Folds away once everything is ticked.
+function WarmupCard (A) {
+  const items = WARMUPS[A.wu]
+  if (!items) return null
+  const done = items.filter((_, i) => A.warm[i]).length
+  const all = done === items.length
+  const toggleOpen = () => update(S => { S.active.warmOpen = !S.active.warmOpen })
+  if (!A.warmOpen) {
+    return h('section', { class: 'card wu-card folded tap', onclick: toggleOpen },
+      h('div', { class: 'row gap' }, h('span', { class: 'wu-badge' + (all ? ' ok' : '') }, all ? svgIcon('check', 'ico sm') : '🔥'),
+        h('div', { class: 'grow' }, h('strong', null, all ? 'Warm-up done' : 'Warm-up'), h('div', { class: 'muted small' }, all ? 'Nice — your body is ready.' : `${done}/${items.length} done · tap to open`)),
+        svgIcon('chev', 'ico muted')))
+  }
+  return h('section', { class: 'card wu-card' },
+    h('div', { class: 'row between' },
+      h('div', null, h('div', { class: 'label accent' }, `Step 1 · Warm-up · ${WARMUP_MIN} min`), h('div', { class: 'muted small' }, 'Gets blood to your muscles and joints ready — fewer injuries, better lifts.')),
+      h('button', { class: 'link', onclick: toggleOpen }, all ? 'Hide' : 'Skip')),
+    h('ul', { class: 'wu-list' }, items.map((w, i) => h('li', null,
+      h('div', { class: 'grow' + (w.id ? ' tap' : ''), onclick: w.id ? () => exerciseSheet(w.id) : null },
+        h('div', null, w.t, w.id ? svgIcon('info', 'ico sm muted') : null), h('div', { class: 'muted small' }, w.d)),
+      h('button', {
+        class: 'check' + (A.warm[i] ? ' on' : ''),
+        'aria-label': A.warm[i] ? 'Mark not done' : 'Mark done',
+        onclick: () => update(S => {
+          S.active.warm[i] = !S.active.warm[i]
+          if (WARMUPS[S.active.wu].every((_, j) => S.active.warm[j])) S.active.warmOpen = false
+        })
+      }, svgIcon('check'))))))
+}
+
+function EntryCard (entry, idx, unit, warmupSets = false) {
   const ex = EX[entry.ex]
   const timed = isTimed(entry.ex)
-  const bw = isBodyweight(entry.ex)
+  const bw = isBodyweight(entry.ex) || timed
   const sug = suggestion(entry)
   const allDone = entry.sets.length && entry.sets.every(s => s.done)
+  const perHand = ['dumbbell', 'kettlebell'].includes(ex.eq)
+  // Long timed work (treadmill, bike) is entered in minutes and stored in seconds.
+  const mins = timed && entry.max >= 120
+  const rShow = r => mins ? Math.round(r / 6) / 10 : r
+  const rFmt = r => mins ? `${rShow(r)} min` : `${r}s`
 
   const prevText = sug.sets.length
-    ? 'Last time: ' + sug.sets.map(s => timed ? `${s.r}s` : (s.w ? `${fmtW(s.w, unit)}×${s.r}` : `${s.r}`)).join(', ')
-    : 'First time — pick a weight you could lift a couple more reps with.'
+    ? 'Last time: ' + sug.sets.map(s => timed ? rFmt(s.r) : (s.w ? `${fmtW(s.w, unit)}×${s.r}` : `${s.r}`)).join(', ')
+    : timed ? 'First time — go at a comfortable pace.'
+      : bw ? 'First time — move slowly and with control.'
+        : `First time — start light: choose a weight you could lift 3–4 more times than ${entry.max}.${perHand ? ' Weight is per dumbbell.' : ''}`
   const tip = sug.hit && !timed && !bw && sug.w ? `You hit all reps last time — try ${fmtW(sug.w, unit)} ${unit} today.` : null
+  const warmTip = warmupSets && !timed && !bw
+    ? 'Before your first set: do 1 warm-up set of 10 reps with about half the weight. Don’t tick it — warm-up sets aren’t counted.'
+    : null
 
   // Placeholders: what the app expects you to do for each set.
   // Falls back to the set above, so a weight typed into set 1 carries down the list.
@@ -349,12 +475,13 @@ function EntryCard (entry, idx, unit) {
       h('img', { class: 'thumb tap', loading: 'lazy', src: gifSrc(ex), alt: '', onclick: () => exerciseSheet(entry.ex) }),
       h('div', { class: 'grow tap', onclick: () => exerciseSheet(entry.ex) },
         h('div', { class: 'strong' }, ex.n),
-        h('div', { class: 'muted small' }, `${entry.sets.length} × ${entry.min}–${entry.max} ${timed ? 'sec' : 'reps'} · rest ${entry.rest}s`)),
+        h('div', { class: 'muted small' }, `${entry.sets.length} × ${repText({ id: entry.ex, min: entry.min, max: entry.max })}${timed ? '' : ' reps'}${entry.rest ? ` · rest ${entry.rest}s` : ''}`)),
       h('button', { class: 'icon-btn', 'aria-label': 'Exercise options', onclick: () => entryMenu(idx) }, svgIcon('more'))),
     h('div', { class: 'prev small muted' }, prevText),
     tip ? h('div', { class: 'tip small' }, svgIcon('flame', 'ico sm'), tip) : null,
+    warmTip ? h('div', { class: 'tip info small' }, svgIcon('info', 'ico sm'), warmTip) : null,
     h('div', { class: 'sets' },
-      h('div', { class: 'set-row head' }, h('span', null, 'Set'), h('span', null, bw ? `+${unit}` : unit), h('span', null, timed ? 'sec' : 'reps'), h('span', null, '')),
+      h('div', { class: 'set-row head' }, h('span', null, 'Set'), h('span', null, mins ? '' : bw ? `+${unit}` : perHand ? `${unit} each` : unit), h('span', null, mins ? 'min' : timed ? 'sec' : 'reps'), h('span', null, '')),
       entry.sets.map((s, si) => {
         const p = ph(si)
         const wIn = h('input', {
@@ -365,13 +492,13 @@ function EntryCard (entry, idx, unit) {
         })
         const rIn = h('input', {
           class: 'num', inputmode: 'numeric', type: 'text', 'aria-label': `Set ${si + 1} ${timed ? 'seconds' : 'reps'}`,
-          placeholder: p.r ?? '',
-          value: s.r ?? '',
-          oninput: ev => { const v = parseInt(ev.target.value, 10); update(S => { S.active.entries[idx].sets[si].r = isNaN(v) ? null : v }, { quiet: true }) }
+          placeholder: p.r != null ? rShow(p.r) : '',
+          value: s.r != null ? rShow(s.r) : '',
+          oninput: ev => { const v = parseFloat(ev.target.value.replace(',', '.')); update(S => { S.active.entries[idx].sets[si].r = isNaN(v) ? null : Math.round(mins ? v * 60 : v) }, { quiet: true }) }
         })
         return h('div', { class: 'set-row' + (s.done ? ' done' : '') },
           h('span', { class: 'set-n' }, si + 1),
-          wIn, rIn,
+          mins ? h('span', { class: 'num na' }, '—') : wIn, rIn,
           h('button', { class: 'check', 'aria-label': s.done ? 'Mark set not done' : 'Mark set done', onclick: () => toggleSet(idx, si, ph(si), wIn, bw) }, svgIcon('check')))
       })),
     h('div', { class: 'entry-foot' },
@@ -470,8 +597,6 @@ function finishWorkout () {
   const w = { id: A.id, date: isoDate(new Date(A.startedAt)), startedAt: A.startedAt, endedAt: Date.now(), planId: A.planId, dayIdx: A.dayIdx, name: A.name, entries }
   update(S => {
     S.workouts.push(w)
-    const plan = planById(S.planId)
-    if (plan && A.planId === plan.id && A.dayIdx != null) S.nextDay = (A.dayIdx + 1) % plan.days.length
     S.active = null; S.restEnd = null
   })
   keepAwake(false)
@@ -490,7 +615,7 @@ function summarySheet (w, prs) {
     h('div', { class: 'stats3' },
       Stat(fmtMinutes((w.endedAt - w.startedAt) / 1000), 'Duration'),
       Stat(sets, 'Sets'),
-      Stat(Math.round(toDisplay(vol, unit)).toLocaleString(), `Volume (${unit})`)),
+      vol > 0 ? Stat(Math.round(toDisplay(vol, unit)).toLocaleString(), `Volume (${unit})`) : Stat(w.entries.length, 'Exercises')),
     prs.length ? h('div', { class: 'card flat pr' }, h('div', { class: 'label accent' }, svgIcon('trophy', 'ico sm'), ` ${prs.length} new personal record${prs.length > 1 ? 's' : ''}`), prs.map(id => h('div', null, EX[id].n))) : null,
     h('button', { class: 'btn primary block', onclick: close }, 'Done')))
 }
@@ -574,13 +699,13 @@ function exerciseSheet (id) {
       ? h('div', null,
         h('div', { class: 'stats3' },
           Stat(sessions.length, 'Sessions'),
-          Stat(bestSet ? (timed ? `${bestSet.r}s` : bestSet.w ? `${fmtW(bestSet.w, unit)}×${bestSet.r}` : `${bestSet.r}`) : '–', 'Best set'),
+          Stat(bestSet ? (timed ? secs(bestSet.r) : bestSet.w ? `${fmtW(bestSet.w, unit)}×${bestSet.r}` : `${bestSet.r}`) : '–', 'Best set'),
           Stat(timed || !bestSet?.w ? '–' : `${fmtW(best, unit)}`, `Est. 1RM${timed || !bestSet?.w ? '' : ` (${unit})`}`)),
         lineChart(points, { fmtY: yFmt, label: `${ex.n} progress` }),
         h('div', { class: 'small muted center' }, timed ? 'Longest set each session (seconds)' : bestSet?.w ? 'Estimated one-rep max each session' : 'Most reps each session'),
         h('ul', { class: 'hist' }, sessions.slice(-6).reverse().map(x => h('li', null,
           h('span', { class: 'muted' }, fmtDate(parseISO(x.date))),
-          h('span', null, x.sets.map(s => timed ? `${s.r}s` : s.w ? `${fmtW(s.w, unit)}×${s.r}` : `${s.r}`).join(' · '))))))
+          h('span', null, x.sets.map(s => timed ? secs(s.r) : s.w ? `${fmtW(s.w, unit)}×${s.r}` : `${s.r}`).join(' · '))))))
       : h('p', { class: 'muted' }, 'No sets logged yet. Your weights and records will show here.')), { full: true })
 }
 
@@ -742,7 +867,7 @@ function workoutDetailSheet (id) {
     h('p', { class: 'muted' }, `${fmtMinutes((w.endedAt - w.startedAt) / 1000)} · ${w.entries.reduce((n, e) => n + e.sets.length, 0)} sets`),
     w.entries.map(e => h('div', { class: 'card flat' },
       h('div', { class: 'strong tap', onclick: () => exerciseSheet(e.ex) }, EX[e.ex]?.n || e.ex),
-      h('div', { class: 'muted small' }, e.sets.map(s => isTimed(e.ex) ? `${s.r}s` : s.w ? `${fmtW(s.w, unit)} ${unit} × ${s.r}` : `${s.r} reps`).join('  ·  ')))),
+      h('div', { class: 'muted small' }, e.sets.map(s => isTimed(e.ex) ? secs(s.r) : s.w ? `${fmtW(s.w, unit)} ${unit} × ${s.r}` : `${s.r} reps`).join('  ·  ')))),
     h('button', {
       class: 'btn danger-ghost block',
       onclick: () => { if (confirm('Delete this workout from your history?')) { update(S => { S.workouts = S.workouts.filter(x => x.id !== id) }); close() } }
@@ -762,8 +887,7 @@ function settingsSheet () {
       h('div', { class: 'row between setting' }, h('span', null, 'Beep when rest is over'),
         h('div', { class: 'seg' }, [['On', true], ['Off', false]].map(([l, v]) => h('button', { class: S.settings.sound === v ? 'on' : '', onclick: () => { update(S => { S.settings.sound = v }); refresh() } }, l)))),
       h('div', { class: 'row between setting' }, h('span', null, 'Plan'), h('button', { class: 'link', onclick: () => { close(); ui.tab = 'plans'; render() } }, plan ? plan.short + ' — change' : 'Choose')),
-      plan ? h('div', { class: 'row between setting' }, h('span', null, 'Next workout'),
-        h('select', { class: 'select sm', onchange: e => { update(S => { S.nextDay = +e.target.value }); refresh() } }, plan.days.map((d, i) => h('option', { value: i, selected: i === S.nextDay % plan.days.length }, `Day ${i + 1}: ${d.name}`)))) : null,
+          h('button', { class: 'menu-item', onclick: tipsSheet }, '💡 New to the gym? Tips'),
       h('div', { class: 'section-title' }, 'Your data'),
       h('p', { class: 'muted small' }, 'Everything is stored only on this phone. Export a backup now and then (e.g. to Files or iCloud Drive).'),
       h('button', { class: 'menu-item', onclick: exportData }, 'Export backup'),
