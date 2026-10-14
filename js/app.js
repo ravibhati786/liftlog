@@ -1025,4 +1025,17 @@ function importData (ev, close) {
 
 render()
 if (state().active) keepAwake(true)
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {})
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  // When a new version takes over, reload once so the open page runs it — unless a workout is in
+  // progress, in which case the update waits for the next launch.
+  const hadController = !!navigator.serviceWorker.controller
+  let reloaded = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded || state().active) return
+    reloaded = true
+    location.reload()
+  })
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}) })
+  }).catch(() => {})
+}
