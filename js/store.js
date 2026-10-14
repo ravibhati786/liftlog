@@ -10,6 +10,8 @@ const fresh = () => ({
   nextDay: 0,           // index into the current plan's days
   workouts: [],         // finished sessions, newest last
   bodyweight: [],       // [{ date: 'YYYY-MM-DD', kg }]
+  waist: [],            // [{ date: 'YYYY-MM-DD', cm }]
+  walks: [],            // ['YYYY-MM-DD', …] rest-day walks ticked off
   active: null,         // the session in progress, if any
   restEnd: null         // epoch ms when the current rest timer runs out
 })

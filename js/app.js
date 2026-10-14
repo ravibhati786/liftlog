@@ -228,7 +228,7 @@ function TodayScreen () {
     main = [h('section', { class: 'card done-card' }, h('div', { class: 'big' }, '✅'), h('h2', null, 'Today’s workout is done'), h('p', { class: 'muted' }, 'Great job! Eat well, drink water and get a good night’s sleep — that’s when your body gets stronger.')),
       WorkoutCard(plan, st.nextIdx, nextLabel, { primary: false, cta: 'Start early' })]
   } else {
-    main = [h('section', { class: 'card done-card' }, h('div', { class: 'big' }, '😴'), h('h2', null, 'Rest day'), h('p', { class: 'muted' }, 'Recovery is when your muscles grow. A walk or some light stretching is perfect today.')),
+    main = [h('section', { class: 'card done-card' }, h('div', { class: 'big' }, '😴'), h('h2', null, 'Rest day'), h('p', { class: 'muted' }, 'Recovery is when your muscles grow. Take an easy 30–40 minute walk today — it burns belly fat without tiring your muscles. Aim for 8–10k steps.'), WalkButton()),
       WorkoutCard(plan, st.nextIdx, nextLabel, { primary: false, cta: 'Train anyway' })]
   }
 
@@ -251,6 +251,21 @@ function TodayScreen () {
 
     S.workouts.length < 10 ? BeginnerTipsCard() : null,
     LastWorkoutCard()]
+}
+
+// Rest-day walk: one tap to tick today off; the count shows how many walks you've done this week.
+function WalkButton () {
+  const S = state()
+  const today = todayISO()
+  const from = isoDate(startOfWeek())
+  const did = S.walks.includes(today)
+  const week = S.walks.filter(d => d >= from).length
+  return h('div', null,
+    h('button', {
+      class: 'btn block' + (did ? '' : ' primary'),
+      onclick: () => update(S => { S.walks = did ? S.walks.filter(d => d !== today) : [...S.walks, today] })
+    }, did ? '✓ Walk done — tap to undo' : 'I walked today'),
+    h('p', { class: 'muted small center' }, `${week} walk${week === 1 ? '' : 's'} this week`))
 }
 
 function DayChip (plan, i, st) {
@@ -809,6 +824,7 @@ function ProgressScreen () {
 
   const bw = [...S.bodyweight].sort((a, b) => a.date.localeCompare(b.date))
   const bwLast = bw.at(-1); const bwFirst = bw[0]
+  const waist = [...S.waist].sort((a, b) => a.date.localeCompare(b.date))
 
   return [
     h('header', { class: 'top' }, h('div', null, h('div', { class: 'eyebrow' }, 'Your training'), h('h1', null, 'Progress'))),
@@ -825,6 +841,15 @@ function ProgressScreen () {
             bw.length > 1 ? h('div', { class: 'delta' + (bwLast.kg - bwFirst.kg > 0 ? ' up' : ' down') }, `${bwLast.kg - bwFirst.kg > 0 ? '+' : ''}${fmtW(bwLast.kg - bwFirst.kg, unit)} ${unit}`, h('div', { class: 'muted small' }, 'since start')) : null),
           bw.length > 1 ? lineChart(bw.map(b => ({ x: parseISO(b.date), y: toDisplay(b.kg, unit) })), { fmtY: v => v.toFixed(1), label: 'Body weight' }) : null]
         : h('p', { class: 'muted' }, 'Log your weight once a week (same time of day) to see your trend.')),
+
+    h('div', { class: 'section-title row between' }, h('span', null, 'Waist'), h('button', { class: 'link', onclick: waistSheet }, svgIcon('plus', 'ico sm'), 'Log waist')),
+    h('section', { class: 'card' },
+      waist.length
+        ? [h('div', { class: 'row between' },
+            h('div', null, h('div', { class: 'big' }, fmtLen(waist.at(-1).cm, unit), h('span', { class: 'muted' }, ` ${lenUnit(unit)}`)), h('div', { class: 'muted small' }, fmtDate(parseISO(waist.at(-1).date)))),
+            waist.length > 1 ? h('div', { class: 'delta' + (waist.at(-1).cm - waist[0].cm > 0 ? ' up' : ' down') }, `${waist.at(-1).cm - waist[0].cm > 0 ? '+' : ''}${fmtLen(waist.at(-1).cm - waist[0].cm, unit)} ${lenUnit(unit)}`, h('div', { class: 'muted small' }, 'since start')) : null),
+          waist.length > 1 ? lineChart(waist.map(b => ({ x: parseISO(b.date), y: unit === 'lb' ? b.cm / 2.54 : b.cm })), { fmtY: v => v.toFixed(1), label: 'Waist' }) : null]
+        : h('p', { class: 'muted' }, 'Measure around your navel (relaxed, after breathing out) every 2 weeks. A shrinking waist with a steady weight means fat loss.')),
 
     h('div', { class: 'section-title' }, 'Strength'),
     h('section', { class: 'card' },
@@ -876,6 +901,38 @@ function weighInSheet () {
         h('ul', { class: 'list' }, list.slice(0, 12).map(b => h('li', null,
           h('span', { class: 'grow' }, fmtDate(parseISO(b.date))), h('strong', null, `${fmtW(b.kg, unit)} ${unit}`),
           h('button', { class: 'icon-btn', 'aria-label': 'Delete', onclick: () => { update(S => { S.bodyweight = S.bodyweight.filter(x => x.date !== b.date) }); refresh() } }, svgIcon('trash', 'ico sm')))))) : null)
+  })
+}
+
+// Waist is stored in cm and shown in inches when the app is set to lb.
+const lenUnit = unit => unit === 'lb' ? 'in' : 'cm'
+const fmtLen = (cm, unit) => String(Math.round((unit === 'lb' ? cm / 2.54 : cm) * 10) / 10).replace(/\.0$/, '')
+
+function waistSheet () {
+  const unit = state().settings.unit
+  let val = ''; let date = todayISO()
+  openSheet((close, refresh) => {
+    const list = [...state().waist].sort((a, b) => b.date.localeCompare(a.date))
+    return h('div', null,
+      h('h2', null, 'Log waist'),
+      h('p', { class: 'muted small' }, 'Tape level with your navel, relaxed, measured after breathing out.'),
+      h('div', { class: 'row gap' },
+        h('input', { class: 'num big-input', inputmode: 'decimal', placeholder: list[0] ? fmtLen(list[0].cm, unit) : lenUnit(unit), value: val, oninput: e => { val = e.target.value } }),
+        h('span', { class: 'muted' }, lenUnit(unit)),
+        h('input', { type: 'date', class: 'date', value: date, max: todayISO(), onchange: e => { date = e.target.value } })),
+      h('button', {
+        class: 'btn primary block',
+        onclick: () => {
+          const v = parseFloat(String(val).replace(',', '.'))
+          if (!(v > 0)) { toast('Enter your waist size'); return }
+          update(S => { S.waist = S.waist.filter(b => b.date !== date); S.waist.push({ date, cm: +(unit === 'lb' ? v * 2.54 : v).toFixed(1) }) })
+          close(); toast('Waist saved')
+        }
+      }, 'Save'),
+      list.length ? h('div', null, h('div', { class: 'section-title' }, 'Recent'),
+        h('ul', { class: 'list' }, list.slice(0, 12).map(b => h('li', null,
+          h('span', { class: 'grow' }, fmtDate(parseISO(b.date))), h('strong', null, `${fmtLen(b.cm, unit)} ${lenUnit(unit)}`),
+          h('button', { class: 'icon-btn', 'aria-label': 'Delete', onclick: () => { update(S => { S.waist = S.waist.filter(x => x.date !== b.date) }); refresh() } }, svgIcon('trash', 'ico sm')))))) : null)
   })
 }
 
