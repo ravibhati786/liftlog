@@ -1,6 +1,6 @@
 import { EXERCISES } from './exercises.js'
 import { PLANS, planById, WARMUPS, COOLDOWNS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
-import { state, update, subscribe, replaceAll, resetAll } from './store.js'
+import { state, update, subscribe, replaceAll, sanitizeBackup, resetAll } from './store.js'
 import {
   h, svgIcon, todayISO, isoDate, parseISO, fmtDate, startOfWeek, fmtDuration, fmtMinutes,
   toDisplay, fromDisplay, fmtW, e1rm, lineChart, uid
@@ -992,9 +992,10 @@ function importData (ev, close) {
   if (!f) return
   f.text().then(txt => {
     const data = JSON.parse(txt)
+    sanitizeBackup(data, id => !!EX[id]) // throws if damaged, before we ask to overwrite anything
     if (!confirm(`Replace everything on this phone with the backup (${data.workouts?.length ?? 0} workouts)?`)) return
-    replaceAll(data); close(); toast('Backup restored')
-  }).catch(() => toast('That file is not a LiftLog backup'))
+    replaceAll(data, id => !!EX[id]); close(); toast('Backup restored')
+  }).catch(e => toast(/damaged/.test(e.message) ? e.message + ' — backup not restored' : 'That file is not a LiftLog backup'))
 }
 
 /* ================================ boot ================================ */
