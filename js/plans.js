@@ -223,6 +223,8 @@ export const BEGINNER_TIPS = [
   ['Ask for help', 'Asking gym staff to show you a machine is completely normal — they do it all day.'],
   ['Soreness is normal, pain isn’t', 'Feeling sore 1–2 days after is normal in the first weeks. Sharp or joint pain means stop that exercise and try a swap or lighter weight.'],
   ['Rest, sleep, eat', 'Muscles grow while you recover. Aim for 7–8 hours of sleep, drink water, and include protein (eggs, dal, paneer, chicken, curd) with your meals.'],
+  ['Eat for your goal', 'To build muscle and lose a little belly fat together, eat around your maintenance calories — not a crash diet. Aim for about 1.6 g of protein per kg of body weight each day (72 kg ≈ 115 g): eggs, dal, paneer, curd, chicken or fish, and whey if you fall short. Spread it over 3–4 meals, and keep sweets, fried snacks and sugary drinks occasional.'],
+  ['Walk on rest days', 'An easy 30–40 minute walk and 8–10k steps a day burns fat without tiring your muscles. Tick it off on the rest days in “Your week”. Measure your waist every 2 weeks too — a shrinking waist with steady weight means it’s working.'],
   ['Missed a day?', 'No problem — just do today’s workout. If you want, you can do a missed one on the weekend.'],
   ['Health first', 'If you have a medical condition, an injury or haven’t exercised in years, check with a doctor before starting.']
 ]
