@@ -422,6 +422,7 @@ function startWorkout (planId, dayIdx) {
       entries: day ? day.ex.map(e => newEntry(e.id, e.sets, e.min, e.max, e.rest)) : []
     }
     S.restEnd = null
+    S.restDoneAt = null
   })
   window.scrollTo(0, 0)
   keepAwake(true)
@@ -581,14 +582,24 @@ function toggleSet (idx, si, p, wIn, bw) {
       const rest = S.active.entries[idx].rest
       S.restEnd = rest ? Date.now() + rest * 1000 : null
       S.restTotal = rest
+      S.restDoneAt = null
     })
   } else {
     update(S => { S.active.entries[idx].sets[si].done = false })
   }
 }
 
+const sinceText = t => { const s = Math.round((Date.now() - t) / 1000); return s < 10 ? 'just now' : `${s < 90 ? s + ' s' : Math.round(s / 60) + ' min'} ago` }
+
 function RestBar () {
   const S = state()
+  if (S.restDoneAt && !S.restEnd) {
+    return h('div', { class: 'restbar finished', id: 'restbar' },
+      h('div', { class: 'rest-inner' },
+        h('div', { class: 'rest-mid' }, h('div', { class: 'small' }, 'Rest finished'), h('div', { class: 'rest-done' }, 'Time for your next set!'),
+          h('div', { class: 'small', 'data-tick': 'since' }, sinceText(S.restDoneAt))),
+        h('button', { class: 'rest-btn skip', onclick: () => update(S => { S.restDoneAt = null }) }, 'Got it')))
+  }
   if (!S.restEnd || S.restEnd <= Date.now()) return null
   const adj = d => update(S => { S.restEnd = Math.max(Date.now() + 1000, S.restEnd + d * 1000); S.restTotal = Math.max(1, (S.restTotal || 0) + d) })
   return h('div', { class: 'restbar', id: 'restbar' },
@@ -630,7 +641,7 @@ function workoutMenu () {
       class: 'menu-item danger',
       onclick: () => {
         if (!confirm('Discard this workout? Nothing will be saved.')) return
-        close(); keepAwake(false); update(S => { S.active = null; S.restEnd = null })
+        close(); keepAwake(false); update(S => { S.active = null; S.restEnd = null; S.restDoneAt = null })
       }
     }, svgIcon('trash'), 'Discard workout')))
 }
@@ -642,7 +653,7 @@ function finishWorkout () {
     .map(e => ({ ex: e.ex, sets: e.sets.filter(s => s.done).map(s => ({ w: s.w || 0, r: s.r || 0 })) }))
     .filter(e => e.sets.length)
   if (!entries.length) {
-    if (confirm('No sets are ticked yet. Discard this workout?')) { keepAwake(false); update(S => { S.active = null; S.restEnd = null }) }
+    if (confirm('No sets are ticked yet. Discard this workout?')) { keepAwake(false); update(S => { S.active = null; S.restEnd = null; S.restDoneAt = null }) }
     return
   }
   const unticked = A.entries.reduce((n, e) => n + e.sets.filter(s => !s.done).length, 0)
@@ -657,7 +668,7 @@ function finishWorkout () {
   const w = { id: A.id, date: isoDate(new Date(A.startedAt)), startedAt: A.startedAt, endedAt: Date.now(), planId: A.planId, dayIdx: A.dayIdx, name: A.name, entries }
   update(S => {
     S.workouts.push(w)
-    S.active = null; S.restEnd = null
+    S.active = null; S.restEnd = null; S.restDoneAt = null
   })
   keepAwake(false)
   ui.tab = 'today'; render(); window.scrollTo(0, 0)
@@ -710,18 +721,22 @@ async function keepAwake (on) {
     if (!on && wakeLock) { await wakeLock.release(); wakeLock = null }
   } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state().active) keepAwake(true) })
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state().active) { keepAwake(true); tick() } })
 
 function tick () {
   const S = state()
   if (!S.active) return
   const el = document.querySelector('[data-tick="elapsed"]')
   if (el) el.textContent = fmtDuration((Date.now() - S.active.startedAt) / 1000)
+  const since = document.querySelector('[data-tick="since"]')
+  if (since && S.restDoneAt) since.textContent = sinceText(S.restDoneAt)
   if (S.restEnd) {
     const left = (S.restEnd - Date.now()) / 1000
     if (left <= 0) {
-      update(S => { S.restEnd = null })
-      beep(); toast('Rest over — next set!')
+      // The page may have been asleep (phone locked): only beep if the rest just ended.
+      const fresh = -left < 5
+      update(S => { S.restDoneAt = S.restEnd; S.restEnd = null })
+      if (fresh) { beep(); toast('Rest over — next set!') }
       return
     }
     const r = document.querySelector('[data-tick="rest"]')
