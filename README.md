@@ -20,6 +20,15 @@ no App Store, no account, no server — your data stays on your phone.
 - **1,075 exercises** with animations and step-by-step instructions.
 - **Backup** — Settings → Export backup (share to Files/iCloud Drive) and Import.
 
+## Tests
+
+```bash
+npm test
+```
+
+Unit tests (Node's built-in runner, no dependencies) cover the progression suggestions and the
+weekly schedule logic in `js/logic.js`, plus helpers in `js/util.js`.
+
 ## Run locally
 
 ```bash

@@ -1,5 +1,6 @@
 import { EXERCISES } from './exercises.js'
 import { PLANS, planById, WARMUPS, COOLDOWNS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
+import { suggestion, weekStatus, isTimedName, isBodyweightEq } from './logic.js'
 import { state, update, subscribe, replaceAll, sanitizeBackup, resetAll } from './store.js'
 import {
   h, svgIcon, todayISO, isoDate, parseISO, fmtDate, startOfWeek, fmtDuration, fmtMinutes,
@@ -15,9 +16,8 @@ const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]))
 const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
 const gifSrc = ex => GIF_BASE + ex.gif
 
-const TIMED_RE = /plank|hold|farmers walk|treadmill|^run|battling ropes|mountain climber|jump rope|stationary bike|elliptical|stepmill|skierg|ergometer|wall sit/i
-const isTimed = id => TIMED_RE.test(EX[id]?.n || '')
-const isBodyweight = id => ['body weight', 'assisted', 'rope'].includes(EX[id]?.eq)
+const isTimed = id => isTimedName(EX[id]?.n)
+const isBodyweight = id => isBodyweightEq(EX[id]?.eq)
 
 const GROUPS = {
   Chest: ['pectorals'],
@@ -56,20 +56,8 @@ function bestOf (exId, sessions = sessionsOf(exId)) {
   return best
 }
 
-// Double progression: once every set reached the top of the rep range, add weight.
-function suggestion (entry) {
-  const last = lastSession(entry.ex)
-  if (!last) return { sets: [], hit: false, w: null }
-  const prev = last.sets
-  const top = Math.max(0, ...prev.map(s => s.w || 0))
-  const hit = prev.length >= entry.sets.length && prev.every(s => (s.r || 0) >= entry.max)
-  const ex = EX[entry.ex]
-  const unit = state().settings.unit
-  const big = ex && ['upper legs'].includes(ex.bp) && ['barbell', 'sled machine', 'leverage machine', 'smith machine', 'trap bar'].includes(ex.eq)
-  const inc = unit === 'lb' ? fromDisplay(big ? 10 : 5, 'lb') : (big ? 5 : 2.5)
-  if (isTimed(entry.ex)) return { sets: prev, hit, w: top || null, r: hit ? entry.max + 5 : null }
-  return { sets: prev, hit, w: top ? (hit && !isBodyweight(entry.ex) ? top + inc : top) : null }
-}
+// Double progression: see suggestion() in logic.js.
+const suggest = entry => suggestion(entry, lastSession(entry.ex), EX[entry.ex], state().settings.unit)
 
 /* ================================ UI state ================================ */
 
@@ -147,22 +135,7 @@ const COOL_MIN = 5
 const SHORT_DAY = d => DAY_NAMES[d].slice(0, 3)
 const ord = dow => (dow + 6) % 7 // Monday = 0 … Sunday = 6
 
-// Where you are in this week's plan: today's workout, what's done, what was missed, what's next.
-function weekStatus (plan) {
-  const S = state()
-  const dow = new Date().getDay()
-  const from = isoDate(startOfWeek())
-  const week = S.workouts.filter(w => w.date >= from)
-  const doneIdx = new Set(week.filter(w => w.planId === plan.id).map(w => w.dayIdx))
-  const todayIdx = plan.days.findIndex(d => d.dow === dow)
-  // Only days since you picked the plan can be "missed" — a plan chosen on Sunday owes nothing.
-  const since = S.planSince || todayISO()
-  const dateOf = d => { const x = startOfWeek(); x.setDate(x.getDate() + ord(d.dow)); return isoDate(x) }
-  const missed = plan.days.map((_, i) => i).filter(i => ord(plan.days[i].dow) < ord(dow) && !doneIdx.has(i) && dateOf(plan.days[i]) >= since)
-  let nextIdx = plan.days.findIndex(d => ord(d.dow) > ord(dow))
-  if (nextIdx < 0) nextIdx = 0
-  return { dow, week, doneIdx, todayIdx, missed, nextIdx }
-}
+const weekOf = plan => weekStatus(plan, state().workouts, state().planSince)
 
 function WeekStrip (plan) {
   const start = startOfWeek()
@@ -217,7 +190,7 @@ function TodayScreen () {
       PlanList()]
   }
 
-  const st = weekStatus(plan)
+  const st = weekOf(plan)
   const target = plan.days.length
   const doneCount = st.doneIdx.size
   const next = plan.days[st.nextIdx]
@@ -504,7 +477,7 @@ function EntryCard (entry, idx, unit, warmupSets = false) {
   const ex = EX[entry.ex]
   const timed = isTimed(entry.ex)
   const bw = isBodyweight(entry.ex) || timed
-  const sug = suggestion(entry)
+  const sug = suggest(entry)
   const allDone = entry.sets.length && entry.sets.every(s => s.done)
   const perHand = ['dumbbell', 'kettlebell'].includes(ex.eq)
   // Long timed work (treadmill, bike) is entered in minutes and stored in seconds.
