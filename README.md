@@ -9,7 +9,7 @@ no App Store, no account, no server — your data stays on your phone.
 - **Plans** — a Beginner 5-day plan (machines first, recommended), a 3-day full-body plan,
   and three harder 5-day plans for later. Every workout is pinned to a weekday — Monday is
   always leg day — and Today shows rest days, what’s done, and anything you missed this week.
-- **Warm-up** — an 8-minute checklist before every workout, plus a warm-up-set reminder on
+- **Warm-up & cool-down** — an 8-minute checklist before every workout and a 5-minute stretch after, plus a warm-up-set reminder on
   the first weighted exercise.
 - **Beginner tips** — “New to the gym?” guide for the first weeks.
 - **Workout logger** — tap ✓ per set; weights carry down from the set above; rest timer with

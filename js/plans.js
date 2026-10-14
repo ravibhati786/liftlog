@@ -50,11 +50,11 @@ export const PLANS = [
     days: [
       {
         dow: 1, wu: 'lower', name: 'Legs', focus: 'Quads · Hamstrings · Glutes · Calves',
-        ex: [s('0739', 3, 10, 12, 90), s('0599', 3, 10, 12, 75), s('0585', 2, 12, 15, 60), s('0597', 2, 12, 15, 60), s('0594', 2, 12, 15, 45), s('2135', 2, 20, 30, 45)]
+        ex: [s('0739', 3, 10, 12, 90), s('0599', 3, 10, 12, 75), s('0585', 2, 12, 15, 60), s('3013', 2, 12, 15, 60), s('0594', 2, 12, 15, 45), s('2135', 2, 20, 30, 45)]
       },
       {
         dow: 2, wu: 'upper', name: 'Upper Body A', focus: 'Chest · Back · Shoulders · Arms',
-        ex: [s('0577', 3, 10, 12, 90), s('2330', 3, 10, 12, 90), s('0603', 2, 10, 12, 75), s('1350', 2, 10, 12, 75), s('0294', 2, 10, 12, 60), s('0200', 2, 10, 12, 60)]
+        ex: [s('0577', 3, 10, 12, 90), s('2330', 3, 10, 12, 90), s('0603', 2, 10, 12, 75), s('1350', 2, 10, 12, 75), s('0602', 2, 12, 15, 60), s('0294', 2, 10, 12, 60), s('0200', 2, 10, 12, 60)]
       },
       {
         dow: 3, wu: 'cardio', name: 'Cardio & Core', focus: 'Heart & lungs · Abs · Glutes',
@@ -66,7 +66,7 @@ export const PLANS = [
       },
       {
         dow: 5, wu: 'upper', name: 'Upper Body B', focus: 'Chest · Back · Shoulders · Arms',
-        ex: [s('0289', 3, 10, 12, 90), s('0581', 3, 10, 12, 90), s('0334', 2, 12, 15, 60), s('0596', 2, 12, 15, 60), s('0313', 2, 10, 12, 60), s('0194', 2, 10, 12, 60)]
+        ex: [s('0289', 3, 10, 12, 90), s('0581', 3, 10, 12, 90), s('2330', 2, 10, 12, 75), s('0334', 2, 12, 15, 60), s('0596', 2, 12, 15, 60), s('0313', 2, 10, 12, 60), s('0194', 2, 10, 12, 60)]
       }
     ]
   },
@@ -183,6 +183,32 @@ export const PLANS = [
     ]
   }
 ]
+
+// Cool-downs: ~5 minutes of easy stretching after the last set. Hold each stretch, don't bounce,
+// and stop at "a stretch", never pain. The dataset has no stretch animations, so these are text only.
+export const COOLDOWNS = {
+  lower: [
+    { t: 'Quad stretch · 30 s each leg', d: 'Stand holding a rail, pull your heel to your glute, knees together.' },
+    { t: 'Hamstring stretch · 30 s each leg', d: 'Heel on a low bench, back straight, lean forward from the hips.' },
+    { t: 'Hip flexor lunge stretch · 30 s each side', d: 'Step into a lunge, back knee down, push hips forward gently.' },
+    { t: 'Figure-4 glute stretch · 30 s each side', d: 'Lie on your back, ankle over opposite knee, pull the thigh toward you.' },
+    { t: 'Calf stretch · 30 s each leg', d: 'Hands on a wall, one leg back with the heel down.' }
+  ],
+  upper: [
+    { t: 'Chest doorway stretch · 30 s', d: 'Forearm on a door frame, elbow at shoulder height, turn away gently.' },
+    { t: 'Cross-body shoulder stretch · 30 s each arm', d: 'Pull one arm across your chest with the other hand.' },
+    { t: 'Triceps stretch · 30 s each arm', d: 'Hand behind your head, press the elbow back with the other hand.' },
+    { t: 'Lat stretch · 30 s each side', d: 'Hold a rail, sit your hips back and let your chest drop.' },
+    { t: 'Child’s pose · 40 s', d: 'Kneel, sit back on your heels, reach your arms forward and breathe slowly.' }
+  ],
+  cardio: [
+    { t: '3 min easy walk', d: 'Slow the treadmill right down and let your breathing settle.' },
+    { t: 'Quad stretch · 30 s each leg', d: 'Hold a rail, pull your heel to your glute.' },
+    { t: 'Calf stretch · 30 s each leg', d: 'Hands on a wall, one leg back with the heel down.' },
+    { t: 'Child’s pose · 40 s', d: 'Kneel, sit back on your heels, reach forward and breathe slowly.' }
+  ]
+}
+COOLDOWNS.full = [COOLDOWNS.lower[0], COOLDOWNS.lower[1], COOLDOWNS.upper[0], COOLDOWNS.upper[1], COOLDOWNS.upper[4]]
 
 export const planById = id => PLANS.find(p => p.id === id)
 

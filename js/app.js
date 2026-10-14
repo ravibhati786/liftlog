@@ -1,5 +1,5 @@
 import { EXERCISES } from './exercises.js'
-import { PLANS, planById, WARMUPS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
+import { PLANS, planById, WARMUPS, COOLDOWNS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
 import { state, update, subscribe, replaceAll, resetAll } from './store.js'
 import {
   h, svgIcon, todayISO, isoDate, parseISO, fmtDate, startOfWeek, fmtDuration, fmtMinutes,
@@ -142,6 +142,7 @@ function greeting () {
 }
 
 const WARMUP_MIN = 8
+const COOL_MIN = 5
 const SHORT_DAY = d => DAY_NAMES[d].slice(0, 3)
 const ord = dow => (dow + 6) % 7 // Monday = 0 … Sunday = 6
 
@@ -178,8 +179,8 @@ function WeekStrip (plan) {
   }))
 }
 
-// Rough session length: ~3 s per rep (or the timed seconds) plus rest, plus the warm-up.
-const estMinutes = day => WARMUP_MIN + Math.round(day.ex.reduce((t, e) => t + e.sets * ((isTimed(e.id) ? e.max : e.max * 3) + e.rest), 0) / 60 / 5) * 5
+// Rough session length: ~3 s per rep (or the timed seconds) plus rest, plus the warm-up and cool-down.
+const estMinutes = day => WARMUP_MIN + COOL_MIN + Math.round(day.ex.reduce((t, e) => t + e.sets * ((isTimed(e.id) ? e.max : e.max * 3) + e.rest), 0) / 60 / 5) * 5
 
 function WorkoutCard (plan, i, label, { primary = true, cta = 'Start workout' } = {}) {
   const day = plan.days[i]
@@ -308,8 +309,8 @@ function PlanList () {
     h('div', { class: 'muted small' }, `Level: ${p.level} · ${p.schedule}`))))
 }
 
-function WarmupList (key) {
-  return h('ul', { class: 'wu-list' }, WARMUPS[key].map(w => h('li', { class: w.id ? 'tap' : null, onclick: w.id ? () => exerciseSheet(w.id) : null },
+function WarmupList (key, src = WARMUPS) {
+  return h('ul', { class: 'wu-list' }, src[key].map(w => h('li', { class: w.id ? 'tap' : null, onclick: w.id ? () => exerciseSheet(w.id) : null },
     h('div', { class: 'grow' }, h('div', null, w.t), h('div', { class: 'muted small' }, w.d)),
     w.id ? svgIcon('info', 'ico muted') : null)))
 }
@@ -319,7 +320,7 @@ function planSheet (p) {
     h('span', { class: 'pill' + (p.recommended ? ' accent' : '') }, `${p.days.length} days / week · ${p.level}`),
     h('h2', null, p.name),
     h('p', { class: 'muted' }, p.about),
-    h('p', { class: 'small muted' }, `Schedule: ${p.schedule}. Every workout starts with an ${WARMUP_MIN}-minute warm-up. Missed a day? Just do today’s workout, or catch up at the weekend.`),
+    h('p', { class: 'small muted' }, `Schedule: ${p.schedule}. Every workout starts with an ${WARMUP_MIN}-minute warm-up and ends with a ${COOL_MIN}-minute stretch. Missed a day? Just do today’s workout, or catch up at the weekend.`),
     p.recommended ? h('button', { class: 'menu-item', onclick: tipsSheet }, '💡 New to the gym? Read the tips first') : null,
     p.days.map((d, i) => h('div', { class: 'card flat' },
       h('div', { class: 'label' }, `${DAY_NAMES[d.dow]} · ~${estMinutes(d)} min`),
@@ -355,6 +356,8 @@ function planDaySheet (plan, i) {
     WarmupList(d.wu),
     h('div', { class: 'section-title' }, '2. Workout'),
     ExerciseRows(d.ex),
+    h('div', { class: 'section-title' }, `3. Cool-down · ${COOL_MIN} min`),
+    WarmupList(d.wu, COOLDOWNS),
     h('div', { class: 'sticky-cta' }, h('button', { class: 'btn primary block', onclick: () => { close(); startWorkout(plan.id, i) } }, 'Start this workout'))), { full: true })
 }
 
@@ -375,6 +378,7 @@ function startWorkout (planId, dayIdx) {
       name: day ? day.name : 'Custom workout',
       wu: day ? day.wu : 'full',
       warm: [],
+      cool: [],
       warmOpen: true,
       startedAt: Date.now(),
       entries: day ? day.ex.map(e => newEntry(e.id, e.sets, e.min, e.max, e.rest)) : []
@@ -400,10 +404,28 @@ function WorkoutScreen () {
     h('div', { class: 'progress-bar' }, h('span', { style: `width:${totalSets ? doneSets / totalSets * 100 : 0}%` })),
     WarmupCard(A),
     A.entries.map((e, i) => EntryCard(e, i, unit, i === firstWeighted(A))),
+    CooldownCard(A),
     h('button', { class: 'btn ghost block', onclick: () => exercisePicker({ title: 'Add exercise', onPick: id => update(S => S.active.entries.push(newEntry(id))) }) }, svgIcon('plus'), 'Add exercise'),
     h('button', { class: 'btn primary block', onclick: finishWorkout }, 'Finish workout'),
     h('div', { class: 'rest-spacer' }),
     RestBar())
+}
+
+// Stretching after the last set. Optional; ticks are just a checklist and aren't saved to history.
+function CooldownCard (A) {
+  const items = COOLDOWNS[A.wu]
+  if (!items) return null
+  const cool = A.cool || []
+  return h('section', { class: 'card wu-card' },
+    h('div', { class: 'label accent' }, `Last step · Cool-down · ${COOL_MIN} min`),
+    h('div', { class: 'muted small' }, 'Do this after your last set. Hold each stretch, breathe slowly, no bouncing.'),
+    h('ul', { class: 'wu-list' }, items.map((w, i) => h('li', null,
+      h('div', { class: 'grow' }, h('div', null, w.t), h('div', { class: 'muted small' }, w.d)),
+      h('button', {
+        class: 'check' + (cool[i] ? ' on' : ''),
+        'aria-label': cool[i] ? 'Mark not done' : 'Mark done',
+        onclick: () => update(S => { S.active.cool = S.active.cool || []; S.active.cool[i] = !S.active.cool[i] })
+      }, svgIcon('check'))))))
 }
 
 const firstWeighted = A => A.entries.findIndex(e => !isTimed(e.ex) && !isBodyweight(e.ex))
