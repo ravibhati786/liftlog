@@ -167,14 +167,15 @@ function WeekStrip (plan) {
   const start = startOfWeek()
   const done = new Set(state().workouts.map(w => w.date))
   const planned = new Set(plan.days.map(d => d.dow))
+  const walked = new Set(state().walks)
   const today = todayISO()
   return h('div', { class: 'week' }, [...Array(7)].map((_, i) => {
     const d = new Date(start); d.setDate(d.getDate() + i)
     const iso = isoDate(d)
     const isPlanned = planned.has(d.getDay())
-    return h('div', { class: 'wday' + (done.has(iso) ? ' done' : '') + (iso === today ? ' today' : '') + (isPlanned ? ' planned' : '') },
+    return h('div', { class: 'wday' + (done.has(iso) ? ' done' : walked.has(iso) ? ' walked' : '') + (iso === today ? ' today' : '') + (isPlanned ? ' planned' : '') },
       h('span', { class: 'wl' }, 'MTWTFSS'[i]),
-      h('span', { class: 'wd' }, done.has(iso) ? svgIcon('check', 'ico sm') : d.getDate()),
+      h('span', { class: 'wd' }, done.has(iso) || walked.has(iso) ? svgIcon('check', 'ico sm') : d.getDate()),
       h('span', { class: 'wdot' }))
   }))
 }
@@ -247,7 +248,7 @@ function TodayScreen () {
 
     h('section', null,
       h('div', { class: 'section-title' }, `Your week · ${plan.short}`),
-      h('div', { class: 'day-chips' }, plan.days.map((_, i) => DayChip(plan, i, st)))),
+      h('div', { class: 'day-chips' }, WeekChips(plan, st))),
 
     S.workouts.length < 10 ? BeginnerTipsCard() : null,
     LastWorkoutCard()]
@@ -266,6 +267,28 @@ function WalkButton () {
       onclick: () => update(S => { S.walks = did ? S.walks.filter(d => d !== today) : [...S.walks, today] })
     }, did ? '✓ Walk done — tap to undo' : 'I walked today'),
     h('p', { class: 'muted small center' }, `${week} walk${week === 1 ? '' : 's'} this week`))
+}
+
+// The week in Monday-to-Sunday order: workout days open the plan, rest days are walk check-ins.
+function WeekChips (plan, st) {
+  const start = startOfWeek()
+  const today = todayISO()
+  const walks = state().walks
+  return [...Array(7)].map((_, k) => {
+    const d = new Date(start); d.setDate(d.getDate() + k)
+    const i = plan.days.findIndex(x => x.dow === d.getDay())
+    if (i >= 0) return DayChip(plan, i, st)
+    const iso = isoDate(d)
+    const did = walks.includes(iso)
+    return h('button', {
+      class: 'day-chip rest' + (iso === today ? ' on' : ''),
+      onclick: () => {
+        if (iso > today) { toast('You can tick this off on the day'); return }
+        update(S => { S.walks = did ? S.walks.filter(x => x !== iso) : [...S.walks, iso] })
+      }
+    }, h('span', { class: 'dn' }, DAY_NAMES[d.getDay()]), h('span', null, 'Rest day · 30–40 min walk'),
+    did ? svgIcon('check', 'ico sm ok') : null)
+  })
 }
 
 function DayChip (plan, i, st) {
