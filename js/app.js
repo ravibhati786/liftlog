@@ -11,7 +11,8 @@ import {
 // "Lever" is the dataset's word for a weight-stack machine; "Machine" is what a beginner sees.
 for (const e of EXERCISES) e.n = e.n.replace(/^Lever /, 'Machine ').replace(/^Low glute bridge on floor$/, 'Glute bridge')
 const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]))
-const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/videos/'
+// Pinned to a commit (not @main) so the animations can't change or vanish under the app.
+const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
 const gifSrc = ex => GIF_BASE + ex.gif
 
 const TIMED_RE = /plank|hold|farmers walk|treadmill|^run|battling ropes|mountain climber|jump rope|stationary bike|elliptical|stepmill|skierg|ergometer|wall sit/i
