@@ -124,3 +124,47 @@ test('last week and other plans do not count as done', () => {
   assert.equal(st.doneIdx.size, 0)
   assert.deepEqual(st.missed, [0])
 })
+
+/* ---------------- food log ---------------- */
+
+import { dayTotals, summarize, MIN_KCAL } from '../js/logic.js'
+import { sanitizeBackup } from '../js/store.js'
+
+const item = (date, kcal, p) => ({ id: `${date}-${kcal}-${p}`, date, meal: 'Lunch', name: 'x', serving: '1', qty: 1, kcal, p })
+
+test('dayTotals sums only the requested date', () => {
+  const food = [item('2026-10-14', 500, 20), item('2026-10-14', 300, 10.5), item('2026-10-13', 999, 99)]
+  assert.deepEqual(dayTotals(food, '2026-10-14'), { kcal: 800, p: 30.5, n: 2 })
+  assert.deepEqual(dayTotals(food, '2026-10-01'), { kcal: 0, p: 0, n: 0 })
+})
+
+test('summarize averages only fully logged days and counts days at target', () => {
+  const end = new Date(2026, 9, 14, 12)
+  const food = [
+    item('2026-10-14', 2000, 120), // complete, hits 115
+    item('2026-10-13', 2400, 80), // complete, below
+    item('2026-10-12', 400, 15), // half-logged: counted as logged, not in averages
+    item('2026-09-01', 2000, 100) // outside the 30-day window
+  ]
+  const s = summarize(food, end, 30, 115)
+  assert.equal(s.logged, 3)
+  assert.equal(s.complete, 2)
+  assert.equal(s.avgP, 100)
+  assert.equal(s.avgKcal, 2200)
+  assert.equal(s.hitDays, 1)
+  assert.deepEqual(s.days.map(d => d.date), ['2026-10-13', '2026-10-14'])
+  assert.ok(MIN_KCAL > 400)
+})
+
+test('summarize with nothing logged', () => {
+  const s = summarize([], new Date(2026, 9, 14), 30, 115)
+  assert.deepEqual([s.logged, s.complete, s.avgP, s.avgKcal, s.hitDays], [0, 0, 0, 0, 0])
+})
+
+test('backup keeps valid food entries and targets, drops bad ones', () => {
+  const good = item('2026-10-14', 500, 20)
+  const out = sanitizeBackup({ workouts: [], food: [good, { date: 'bad' }, null], settings: { proteinTarget: 130, kcalTarget: 'x' } })
+  assert.deepEqual(out.food, [good])
+  assert.equal(out.settings.proteinTarget, 130)
+  assert.equal(out.settings.kcalTarget, 2300)
+})

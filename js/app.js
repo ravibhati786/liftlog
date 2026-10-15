@@ -1,6 +1,7 @@
 import { EXERCISES } from './exercises.js'
 import { PLANS, planById, WARMUPS, COOLDOWNS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
-import { suggestion, weekStatus, isTimedName, isBodyweightEq } from './logic.js'
+import { suggestion, weekStatus, isTimedName, isBodyweightEq, dayTotals, summarize, MIN_KCAL } from './logic.js'
+import { FOODS, MEALS } from './foods.js'
 import { state, update, subscribe, replaceAll, sanitizeBackup, resetAll } from './store.js'
 import {
   h, svgIcon, todayISO, isoDate, parseISO, fmtDate, startOfWeek, fmtDuration, fmtMinutes,
@@ -65,6 +66,7 @@ const ui = {
   tab: 'today',
   libQuery: '',
   libGroup: 'All',
+  foodDate: todayISO(),
   liftId: null,
   sheets: []
 }
@@ -82,10 +84,10 @@ function render () {
 }
 subscribe(render)
 
-const SCREENS = { today: TodayScreen, plans: PlansScreen, progress: ProgressScreen, library: LibraryScreen }
+const SCREENS = { today: TodayScreen, plans: PlansScreen, progress: ProgressScreen, food: FoodScreen, library: LibraryScreen }
 
 function TabBar () {
-  const tabs = [['today', 'Today'], ['plans', 'Plans'], ['progress', 'Progress'], ['library', 'Exercises']]
+  const tabs = [['today', 'Today'], ['plans', 'Plans'], ['progress', 'Progress'], ['food', 'Food'], ['library', 'Exercises']]
   return h('nav', { class: 'tabbar' }, tabs.map(([id, label]) =>
     h('button', { class: 'tab' + (ui.tab === id ? ' on' : ''), onclick: () => { ui.tab = id; window.scrollTo(0, 0); render() } },
       svgIcon(id === 'library' ? 'library' : id), h('span', null, label))))
@@ -1008,6 +1010,164 @@ function importData (ev, close) {
     if (!confirm(`Replace everything on this phone with the backup (${data.workouts?.length ?? 0} workouts)?`)) return
     replaceAll(data, id => !!EX[id]); close(); toast('Backup restored')
   }).catch(e => toast(/damaged/.test(e.message) ? e.message + ' — backup not restored' : 'That file is not a LiftLog backup'))
+}
+
+/* ================================ FOOD LOG ================================ */
+
+const fmtN = n => String(Math.round(n * 10) / 10)
+const defaultMeal = () => { const hr = new Date().getHours(); return hr < 11 ? 'Breakfast' : hr < 16 ? 'Lunch' : hr < 19 ? 'Snacks' : 'Dinner' }
+const shiftDate = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoDate(d) }
+
+function addFood (meal, date, f, qty) {
+  update(S => S.food.push({ id: uid(), date, meal, name: f.n, serving: f.serving, qty, kcal: Math.round(f.kcal * qty), p: Math.round(f.p * qty * 10) / 10 }))
+}
+
+function FoodScreen () {
+  const S = state()
+  const { proteinTarget: pT, kcalTarget: kT } = S.settings
+  const date = ui.foodDate
+  const today = todayISO()
+  const t = dayTotals(S.food, date)
+  const items = S.food.filter(f => f.date === date)
+  const bar = (v, max) => h('div', { class: 'progress-bar' }, h('span', { style: `width:${Math.min(100, max ? v / max * 100 : 0)}%` }))
+  const sum = summarize(S.food, new Date(), 30, pT)
+  const copyYesterday = () => {
+    const prev = S.food.filter(f => f.date === shiftDate(date, -1))
+    if (!prev.length) { toast('Nothing logged the day before'); return }
+    update(S => prev.forEach(f => S.food.push({ ...f, id: uid(), date })))
+  }
+
+  return [
+    h('header', { class: 'top' }, h('div', null, h('div', { class: 'eyebrow' }, 'What you eat'), h('h1', null, 'Food')),
+      h('button', { class: 'link', onclick: targetsSheet }, 'Targets')),
+    h('div', { class: 'row between datenav' },
+      h('button', { class: 'icon-btn', 'aria-label': 'Previous day', onclick: () => { ui.foodDate = shiftDate(date, -1); render() } }, svgIcon('back')),
+      h('strong', null, date === today ? 'Today' : fmtDate(parseISO(date), { weekday: 'long', day: 'numeric', month: 'short' })),
+      h('button', { class: 'icon-btn', 'aria-label': 'Next day', disabled: date >= today, onclick: () => { ui.foodDate = shiftDate(date, 1); render() } }, svgIcon('chev'))),
+    h('section', { class: 'card' },
+      h('div', { class: 'row between' },
+        h('div', null, h('div', { class: 'label' }, 'Protein'), h('div', { class: 'big' }, fmtN(t.p), h('span', { class: 'muted' }, ` / ${pT} g`))),
+        h('div', { class: 'right' }, h('div', { class: 'label' }, 'Calories'), h('div', { class: 'big' }, t.kcal.toLocaleString(), h('span', { class: 'muted' }, ` / ${kT.toLocaleString()}`)))),
+      h('div', { class: 'spacer' }), bar(t.p, pT), bar(t.kcal, kT)),
+    MEALS.map(meal => {
+      const list = items.filter(f => f.meal === meal)
+      const k = list.reduce((n, f) => n + f.kcal, 0)
+      return h('section', null,
+        h('div', { class: 'section-title row between' }, h('span', null, `${meal}${k ? ` · ${k} kcal` : ''}`), h('button', { class: 'link', onclick: () => foodPicker(meal, date) }, svgIcon('plus', 'ico sm'), 'Add')),
+        list.length ? h('ul', { class: 'card list' }, list.map(f => h('li', { class: 'tap', onclick: () => foodEntrySheet(f.id) },
+          h('div', { class: 'grow' }, h('div', null, f.name), h('div', { class: 'muted small' }, `${fmtN(f.qty)} × ${f.serving}`)),
+          h('div', { class: 'right nowrap' }, h('strong', null, `${fmtN(f.p)} g`), h('div', { class: 'muted small' }, `${f.kcal} kcal`))))) : null)
+    }),
+    !items.length ? h('button', { class: 'btn ghost block', onclick: copyYesterday }, 'Copy the day before') : null,
+
+    h('div', { class: 'section-title' }, 'Last 30 days'),
+    h('section', { class: 'card' },
+      sum.complete
+        ? [h('div', { class: 'stats3' }, Stat(`${sum.avgP} g`, 'Avg protein'), Stat(sum.avgKcal.toLocaleString(), 'Avg kcal'), Stat(`${sum.hitDays}/${sum.complete}`, 'Days at target')),
+          h('p', { class: 'small' }, sum.avgP >= pT
+            ? `Your protein average is on target (${pT} g).`
+            : `You average about ${pT - sum.avgP} g less protein than your ${pT} g target.`,
+          sum.avgKcal ? ` Calories average ${sum.avgKcal > kT ? `${sum.avgKcal - kT} above` : `${kT - sum.avgKcal} below`} your ${kT.toLocaleString()} kcal target.` : ''),
+          sum.days.length > 1 ? lineChart(sum.days.map(d => ({ x: parseISO(d.date), y: d.p })), { fmtY: v => Math.round(v), label: 'Daily protein' }) : null,
+          h('p', { class: 'muted small' }, `Based on ${sum.complete} day${sum.complete === 1 ? '' : 's'} with at least ${MIN_KCAL} kcal logged (${sum.logged} logged in all). Keep eating as usual for a few weeks, then adjust.`)]
+        : h('p', { class: 'muted' }, 'Log what you normally eat for a few weeks. Averages appear here once a day has at least ' + MIN_KCAL + ' kcal logged.'))
+  ]
+}
+
+function foodPicker (meal, date) {
+  let q = ''; let pick = null; let qty = 1; let custom = false
+  const recent = () => {
+    const seen = new Set(); const out = []
+    for (const f of [...state().food].reverse()) {
+      if (seen.has(f.name)) continue
+      seen.add(f.name)
+      const base = FOODS.find(x => x.n === f.name)
+      out.push(base || { n: f.name, serving: f.serving, kcal: f.kcal / f.qty, p: f.p / f.qty })
+      if (out.length >= 8) break
+    }
+    return out
+  }
+  openSheet((close, refresh) => {
+    if (custom) {
+      const c = { n: '', kcal: '', p: '' }
+      return h('div', null, h('h2', null, 'Custom food'),
+        h('input', { class: 'select', placeholder: 'Name (e.g. Mom’s thali)', oninput: e => { c.n = e.target.value } }),
+        h('div', { class: 'row gap', style: 'margin-top:10px' },
+          h('input', { class: 'num', inputmode: 'decimal', placeholder: 'kcal', oninput: e => { c.kcal = e.target.value } }),
+          h('input', { class: 'num', inputmode: 'decimal', placeholder: 'protein g', oninput: e => { c.p = e.target.value } })),
+        h('button', {
+          class: 'btn primary block',
+          onclick: () => {
+            const kcal = parseFloat(String(c.kcal).replace(',', '.')); const p = parseFloat(String(c.p).replace(',', '.')) || 0
+            if (!c.n.trim() || !(kcal >= 0)) { toast('Enter a name and calories'); return }
+            addFood(meal, date, { n: c.n.trim(), serving: '1 serving', kcal, p }, 1); close(); toast('Added')
+          }
+        }, 'Add'),
+        h('button', { class: 'link center block', onclick: () => { custom = false; refresh() } }, 'Back to the list'))
+    }
+    if (pick) {
+      return h('div', null, h('h2', null, pick.n), h('p', { class: 'muted' }, `1 serving = ${pick.serving} · ${Math.round(pick.kcal)} kcal · ${fmtN(pick.p)} g protein`),
+        h('div', { class: 'row between stepper' },
+          h('button', { class: 'icon-btn', 'aria-label': 'Less', onclick: () => { qty = Math.max(0.5, qty - 0.5); refresh() } }, svgIcon('minus')),
+          h('div', { class: 'center' }, h('div', { class: 'big' }, `${fmtN(qty)} ×`), h('div', { class: 'muted small' }, `${Math.round(pick.kcal * qty)} kcal · ${fmtN(pick.p * qty)} g protein`)),
+          h('button', { class: 'icon-btn', 'aria-label': 'More', onclick: () => { qty += 0.5; refresh() } }, svgIcon('plus'))),
+        h('button', { class: 'btn primary block', onclick: () => { addFood(meal, date, pick, qty); close(); toast(`Added to ${meal.toLowerCase()}`) } }, `Add to ${meal.toLowerCase()}`),
+        h('button', { class: 'link center block', onclick: () => { pick = null; qty = 1; refresh() } }, 'Back to the list'))
+    }
+    const row = f => h('li', { class: 'tap', onclick: () => { pick = f; qty = 1; refresh() } },
+      h('div', { class: 'grow' }, h('div', null, f.n), h('div', { class: 'muted small' }, f.serving)),
+      h('div', { class: 'right nowrap muted small' }, `${fmtN(f.p)} g · ${Math.round(f.kcal)} kcal`))
+    const list = h('div')
+    const draw = () => {
+      const m = q.trim() ? FOODS.filter(f => f.n.toLowerCase().includes(q.trim().toLowerCase())) : FOODS
+      list.replaceChildren(
+        !q.trim() && recent().length ? h('div', null, h('div', { class: 'section-title' }, 'Recent'), h('ul', { class: 'list' }, recent().map(row))) : null,
+        h('div', { class: 'section-title' }, q.trim() ? `${m.length} found` : 'All foods'),
+        h('ul', { class: 'list' }, m.map(row)),
+        h('button', { class: 'menu-item', onclick: () => { custom = true; refresh() } }, '＋ Add a custom food'))
+    }
+    draw()
+    return h('div', null, h('h2', null, `Add to ${meal.toLowerCase()}`),
+      h('label', { class: 'search' }, svgIcon('search', 'ico muted'), h('input', { type: 'search', placeholder: 'Search foods (dal, paneer, roti…)', oninput: e => { q = e.target.value; draw() } })),
+      list)
+  }, { full: true })
+}
+
+function foodEntrySheet (id) {
+  openSheet((close, refresh) => {
+    const f = state().food.find(x => x.id === id)
+    if (!f) { close(); return h('div') }
+    const setQty = n => update(S => {
+      const e = S.food.find(x => x.id === id)
+      const k = e.kcal / e.qty; const p = e.p / e.qty
+      e.qty = n; e.kcal = Math.round(k * n); e.p = Math.round(p * n * 10) / 10
+    })
+    return h('div', null, h('h2', null, f.name), h('p', { class: 'muted' }, `${f.meal} · 1 serving = ${f.serving}`),
+      h('div', { class: 'row between stepper' },
+        h('button', { class: 'icon-btn', 'aria-label': 'Less', onclick: () => { if (f.qty > 0.5) { setQty(f.qty - 0.5); refresh() } } }, svgIcon('minus')),
+        h('div', { class: 'center' }, h('div', { class: 'big' }, `${fmtN(f.qty)} ×`), h('div', { class: 'muted small' }, `${f.kcal} kcal · ${fmtN(f.p)} g protein`)),
+        h('button', { class: 'icon-btn', 'aria-label': 'More', onclick: () => { setQty(f.qty + 0.5); refresh() } }, svgIcon('plus'))),
+      h('button', { class: 'btn primary block', onclick: close }, 'Done'),
+      h('button', { class: 'menu-item danger', onclick: () => { update(S => { S.food = S.food.filter(x => x.id !== id) }); close() } }, 'Remove this item'))
+  })
+}
+
+function targetsSheet () {
+  const S0 = state().settings
+  const v = { p: String(S0.proteinTarget), k: String(S0.kcalTarget) }
+  openSheet(close => h('div', null, h('h2', null, 'Daily targets'),
+    h('p', { class: 'muted small' }, 'Starting guesses for your body weight: about 1.6 g of protein per kg, and calories near maintenance. We’ll refine them after a month of logging.'),
+    h('div', { class: 'row gap' },
+      h('label', { class: 'grow' }, h('div', { class: 'muted small' }, 'Protein (g)'), h('input', { class: 'num', inputmode: 'numeric', value: v.p, oninput: e => { v.p = e.target.value } })),
+      h('label', { class: 'grow' }, h('div', { class: 'muted small' }, 'Calories (kcal)'), h('input', { class: 'num', inputmode: 'numeric', value: v.k, oninput: e => { v.k = e.target.value } }))),
+    h('button', {
+      class: 'btn primary block',
+      onclick: () => {
+        const p = parseInt(v.p, 10); const k = parseInt(v.k, 10)
+        if (!(p > 0) || !(k > 0)) { toast('Enter both targets'); return }
+        update(S => { S.settings.proteinTarget = p; S.settings.kcalTarget = k }); close()
+      }
+    }, 'Save')))
 }
 
 /* ================================ boot ================================ */

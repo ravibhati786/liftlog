@@ -286,3 +286,11 @@ body.in-workout .screen { padding-bottom: calc(var(--safe-b) + 40px); }
 .wu-card > .row.between { align-items: flex-start; gap: 12px; }
 .wu-card > .row.between .link { flex: none; padding-top: 0; }
 .num.na { display: grid; place-items: center; color: var(--muted); background: none; }
+
+/* food log */
+.datenav { margin: 4px 0 12px; }
+.datenav .icon-btn:disabled { opacity: .3; }
+.right { text-align: right; }
+.spacer { height: 10px; }
+.stepper { margin: 18px 0 8px; }
+.stepper .icon-btn { width: 52px; height: 52px; }

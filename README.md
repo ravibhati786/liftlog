@@ -16,6 +16,7 @@ no App Store, no account, no server — your data stays on your phone.
   beep, ±15 s and skip; swap an exercise if a machine is busy; screen stays awake.
 - **Progression** — shows what you did last time and suggests adding weight once you hit the
   top of the rep range on every set (double progression). Personal records are celebrated.
+- **Food log** — log what you eat from ~55 everyday vegetarian Indian foods (or add your own), with daily protein and calorie totals against your targets and a 30-day average. Meant for a month of eating as usual before adjusting your diet.
 - **Progress** — workouts per week, streak, body-weight and waist logs, rest-day walk tracker, estimated 1RM chart per lift, history.
 - **1,075 exercises** with animations and step-by-step instructions.
 - **Backup** — Settings → Export backup (share to Files/iCloud Drive) and Import.

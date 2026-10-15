@@ -40,3 +40,31 @@ export function weekStatus (plan, workouts, planSince, now = new Date()) {
   if (nextIdx < 0) nextIdx = 0
   return { dow, week, doneIdx, todayIdx, missed, nextIdx }
 }
+
+/* ---------------- food log ---------------- */
+
+// A day with less than this many logged kcal is treated as "not fully logged" and left out of
+// the averages, so a forgotten dinner doesn't drag the numbers down.
+export const MIN_KCAL = 800
+
+export function dayTotals (food, date) {
+  let kcal = 0; let p = 0; let n = 0
+  for (const f of food) if (f.date === date) { kcal += f.kcal; p += f.p; n++ }
+  return { kcal: Math.round(kcal), p: Math.round(p * 10) / 10, n }
+}
+
+// Summary of the `days` days ending on `end` (a Date): per-day totals for fully logged days and
+// their averages, plus how many of them reached the protein target.
+export function summarize (food, end, days, proteinTarget) {
+  const out = []
+  let logged = 0
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end.getFullYear(), end.getMonth(), end.getDate() - i)
+    const date = isoDate(d)
+    const t = dayTotals(food, date)
+    if (t.n) logged++
+    if (t.kcal >= MIN_KCAL) out.push({ date, kcal: t.kcal, p: t.p })
+  }
+  const avg = k => out.length ? Math.round(out.reduce((s, d) => s + d[k], 0) / out.length) : 0
+  return { days: out, logged, complete: out.length, avgKcal: avg('kcal'), avgP: avg('p'), hitDays: out.filter(d => d.p >= proteinTarget).length }
+}
