@@ -1,7 +1,7 @@
 // Offline support: the app shell is cached on install; exercise animations are cached the
 // first time they are viewed, so a workout you've done before works with no signal.
 // Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'liftlog-v13'
+const VERSION = 'liftlog-v14'
 const MEDIA = 'liftlog-media'
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/store.js', 'js/util.js', 'js/plans.js', 'js/logic.js', 'js/foods.js', 'js/exercises.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png']
 
