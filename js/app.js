@@ -1,6 +1,6 @@
 import { EXERCISES } from './exercises.js'
 import { PLANS, planById, WARMUPS, COOLDOWNS, DAY_NAMES, BEGINNER_TIPS } from './plans.js'
-import { suggestion, weekStatus, isTimedName, isBodyweightEq, dayTotals, summarize, MIN_KCAL } from './logic.js'
+import { suggestion, weekStatus, isTimedName, isBodyweightEq, weightMode, WEIGHT_MODES, dayTotals, summarize, MIN_KCAL } from './logic.js'
 import { FOODS, MEALS } from './foods.js'
 import { state, update, subscribe, replaceAll, sanitizeBackup, resetAll } from './store.js'
 import {
@@ -17,6 +17,7 @@ const EX = Object.fromEntries(EXERCISES.map(e => [e.id, e]))
 const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
 const gifSrc = ex => GIF_BASE + ex.gif
 
+const modeOf = id => weightMode(EX[id], state().weightModes?.[id])
 const isTimed = id => isTimedName(EX[id]?.n)
 const isBodyweight = id => isBodyweightEq(EX[id]?.eq)
 
@@ -481,7 +482,7 @@ function EntryCard (entry, idx, unit, warmupSets = false) {
   const bw = isBodyweight(entry.ex) || timed
   const sug = suggest(entry)
   const allDone = entry.sets.length && entry.sets.every(s => s.done)
-  const perHand = ['dumbbell', 'kettlebell'].includes(ex.eq)
+  const mode = modeOf(entry.ex)
   // Long timed work (treadmill, bike) is entered in minutes and stored in seconds.
   const mins = timed && entry.max >= 120
   const rShow = r => mins ? Math.round(r / 6) / 10 : r
@@ -491,7 +492,7 @@ function EntryCard (entry, idx, unit, warmupSets = false) {
     ? 'Last time: ' + sug.sets.map(s => timed ? rFmt(s.r) : (s.w ? `${fmtW(s.w, unit)}×${s.r}` : `${s.r}`)).join(', ')
     : timed ? 'First time — go at a comfortable pace.'
       : bw ? 'First time — move slowly and with control.'
-        : `First time — start light: choose a weight you could lift 3–4 more times than ${entry.max}.${perHand ? ' Weight is per dumbbell.' : ''}`
+        : `First time — start light: choose a weight you could lift 3–4 more times than ${entry.max}.${mode === 'each' ? ' Weight is for each hand.' : mode === 'side' ? ' Weight is for each side.' : ''}`
   const tip = sug.hit && !timed && !bw && sug.w ? `You hit all reps last time — try ${fmtW(sug.w, unit)} ${unit} today.` : null
   const warmTip = warmupSets && !timed && !bw
     ? 'Before your first set: do 1 warm-up set of 10 reps with about half the weight. Don’t tick it — warm-up sets aren’t counted.'
@@ -518,7 +519,7 @@ function EntryCard (entry, idx, unit, warmupSets = false) {
     tip ? h('div', { class: 'tip small' }, svgIcon('flame', 'ico sm'), tip) : null,
     warmTip ? h('div', { class: 'tip info small' }, svgIcon('info', 'ico sm'), warmTip) : null,
     h('div', { class: 'sets' },
-      h('div', { class: 'set-row head' }, h('span', null, 'Set'), h('span', null, mins ? '' : bw ? `+${unit}` : perHand ? `${unit} each` : unit), h('span', null, mins ? 'min' : timed ? 'sec' : 'reps'), h('span', null, '')),
+      h('div', { class: 'set-row head' }, h('span', null, 'Set'), h('span', null, mins ? '' : mode === 'each' ? `${unit} each` : mode === 'side' ? `${unit} per side` : bw ? `+${unit}` : unit), h('span', null, mins ? 'min' : timed ? 'sec' : 'reps'), h('span', null, '')),
       entry.sets.map((s, si) => {
         const p = ph(si)
         const wIn = h('input', {
@@ -603,6 +604,9 @@ function entryMenu (idx) {
       }
     }, svgIcon('swap'), 'Swap exercise (machine busy?)'),
     idx > 0 ? h('button', { class: 'menu-item', onclick: () => { close(); update(S => { const a = S.active.entries; [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]] }) } }, svgIcon('back'), 'Move up') : null,
+    h('div', { class: 'row gap' },
+      h('span', { class: 'grow' }, 'Weight counted as'),
+      ...WEIGHT_MODES.map(m => h('button', { class: 'chip' + (modeOf(entry.ex) === m ? ' on' : ''), onclick: () => { update(S => { S.weightModes = { ...S.weightModes, [entry.ex]: m } }); close() } }, { total: 'Total', each: 'Each hand', side: 'Per side' }[m]))),
     h('div', { class: 'row gap' },
       h('span', { class: 'grow' }, 'Rest between sets'),
       ...[45, 60, 90, 120, 180].map(r => h('button', { class: 'chip' + (entry.rest === r ? ' on' : ''), onclick: () => { update(S => { S.active.entries[idx].rest = r }); close() } }, r + 's'))),

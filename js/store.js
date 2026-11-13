@@ -12,6 +12,7 @@ const fresh = () => ({
   bodyweight: [],       // [{ date: 'YYYY-MM-DD', kg }]
   waist: [],            // [{ date: 'YYYY-MM-DD', cm }]
   walks: [],            // ['YYYY-MM-DD', …] rest-day walks ticked off
+  weightModes: {},      // { exerciseId: 'total' | 'each' | 'side' } overrides for the weight label
   food: [],             // [{ id, date, meal, name, serving, qty, kcal, p }] — kcal/p are totals
   active: null,         // the session in progress, if any
   restEnd: null         // epoch ms when the current rest timer runs out
@@ -76,6 +77,7 @@ export function sanitizeBackup (data, isKnownEx = () => true) {
     bodyweight: keep(data.bodyweight, b => isObj(b) && isDate(b.date) && isNum(b.kg) && b.kg > 0),
     waist: keep(data.waist, b => isObj(b) && isDate(b.date) && isNum(b.cm) && b.cm > 0),
     walks: keep(data.walks, isDate),
+    weightModes: isObj(data.weightModes) ? Object.fromEntries(Object.entries(data.weightModes).filter(([, v]) => ['total', 'each', 'side'].includes(v))) : {},
     food: keep(data.food, f => isObj(f) && typeof f.id === 'string' && isDate(f.date) && typeof f.name === 'string' && isNum(f.kcal) && isNum(f.p) && isNum(f.qty))
   }
 }

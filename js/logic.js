@@ -41,6 +41,22 @@ export function weekStatus (plan, workouts, planSince, now = new Date()) {
   return { dow, week, doneIdx, todayIdx, missed, nextIdx }
 }
 
+/* ---------------- weight labels ---------------- */
+
+// How the weight you type is counted: 'total' (one number for the whole load), 'each' (a
+// dumbbell in each hand) or 'side' (plates on each side). This only changes the label.
+export const WEIGHT_MODES = ['total', 'each', 'side']
+const ONE_WEIGHT_RE = /goblet|pullover|swing|sumo|thruster|one arm|single arm|one leg|single leg|overhead triceps/i
+const LOADED_BODYWEIGHT_RE = /lunge|split squat|step.?up|farmers|carry/i
+
+export function weightMode (ex, override) {
+  if (WEIGHT_MODES.includes(override)) return override
+  if (!ex) return 'total'
+  if (['dumbbell', 'kettlebell'].includes(ex.eq)) return ONE_WEIGHT_RE.test(ex.n) ? 'total' : 'each'
+  if (ex.eq === 'body weight' && LOADED_BODYWEIGHT_RE.test(ex.n)) return 'each'
+  return 'total'
+}
+
 /* ---------------- food log ---------------- */
 
 // A day with less than this many logged kcal is treated as "not fully logged" and left out of

@@ -168,3 +168,33 @@ test('backup keeps valid food entries and targets, drops bad ones', () => {
   assert.equal(out.settings.proteinTarget, 130)
   assert.equal(out.settings.kcalTarget, 2300)
 })
+
+/* ---------------- weight labels ---------------- */
+
+import { weightMode } from '../js/logic.js'
+
+test('dumbbell moves are "each"; goblet squat, pullover and one-arm moves are a single weight', () => {
+  assert.equal(weightMode({ n: 'Dumbbell bench press', eq: 'dumbbell' }), 'each')
+  assert.equal(weightMode({ n: 'Dumbbell goblet squat', eq: 'dumbbell' }), 'total')
+  assert.equal(weightMode({ n: 'Kettlebell swing', eq: 'kettlebell' }), 'total')
+  assert.equal(weightMode({ n: 'Dumbbell one arm row', eq: 'dumbbell' }), 'total')
+})
+
+test('loaded bodyweight moves like walking lunge count each hand; machines are total', () => {
+  assert.equal(weightMode({ n: 'Walking lunge', eq: 'body weight' }), 'each')
+  assert.equal(weightMode({ n: 'Dead bug', eq: 'body weight' }), 'total')
+  assert.equal(weightMode({ n: '45° leg press', eq: 'sled machine' }), 'total')
+  assert.equal(weightMode({ n: 'Cable lat pulldown', eq: 'cable' }), 'total')
+  assert.equal(weightMode(undefined), 'total')
+})
+
+test('your own setting always wins; junk values are ignored', () => {
+  assert.equal(weightMode({ n: '45° leg press', eq: 'sled machine' }, 'side'), 'side')
+  assert.equal(weightMode({ n: 'Dumbbell bench press', eq: 'dumbbell' }, 'total'), 'total')
+  assert.equal(weightMode({ n: 'Dumbbell bench press', eq: 'dumbbell' }, 'nonsense'), 'each')
+})
+
+test('backup keeps valid weight settings only', () => {
+  const out = sanitizeBackup({ workouts: [], weightModes: { 1: 'side', 2: 'bad' } })
+  assert.deepEqual(out.weightModes, { 1: 'side' })
+})
